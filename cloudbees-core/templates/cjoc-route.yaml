@@ -1,0 +1,23 @@
+{{ if .Values.OperationsCenter.Enabled -}}
+{{- if include "cloudbees-core.needs-routes" . -}}
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: cjoc
+  labels:
+{{ include "cloudbees-core.labels" . | indent 4 }}
+spec:
+{{- if (include "oc.hostnamewithoutport" .) }}
+  host:  {{ include "oc.hostnamewithoutport" . | quote }}
+{{- end }}
+  path: {{ include "oc.contextpath" . | quote }}
+  to:
+    kind: Service
+    name: cjoc
+    weight: 100
+  port:
+    targetPort: http
+  wildcardPolicy: None
+{{ include "openshift.tls" . | indent 2 }}
+{{- end -}}
+{{- end -}}

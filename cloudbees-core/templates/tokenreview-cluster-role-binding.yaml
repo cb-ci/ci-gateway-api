@@ -1,0 +1,24 @@
+{{- if and .Values.rbac.install (eq (include "rbac.masterSeparateServiceAccount" .) "true") -}}
+{{- if eq (include "isTokenReviewEnabled" .) "true" -}}
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: auth-tokenreviews-binding-{{ .Release.Namespace }}
+  labels:
+{{ include "cloudbees-core.labels" . | indent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: auth-tokenreviews-{{ .Release.Namespace }}
+subjects:
+- kind: Group
+  # Bind the role to all service accounts in the namespace
+  name: system:serviceaccounts:{{ .Release.Namespace }}
+  apiGroup: rbac.authorization.k8s.io
+{{- if .Values.Master.OperationsCenterNamespace }}
+- kind: Group
+  name: system:serviceaccounts:{{ .Values.Master.OperationsCenterNamespace }}
+  apiGroup: rbac.authorization.k8s.io
+{{- end }}
+{{- end -}}
+{{- end -}}

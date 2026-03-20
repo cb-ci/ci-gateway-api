@@ -1,0 +1,17 @@
+{{- if .Values.Hibernation.Enabled -}}
+{{- if .Values.rbac.install -}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: managed-master-hibernation-monitor
+  labels:
+{{ include "cloudbees-core.labels" . | indent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: managed-master-hibernation-monitor
+subjects:
+- kind: ServiceAccount
+  name: {{ .Values.rbac.hibernationMonitorServiceAccountName }}
+{{- end -}}
+{{- end -}}

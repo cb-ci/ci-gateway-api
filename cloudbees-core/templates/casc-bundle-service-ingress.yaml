@@ -1,0 +1,36 @@
+{{- if and .Values.CascBundleService.enabled  .Values.CascBundleService.ingress.enabled -}}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "cascBundleService.globalName" . }}
+  namespace: {{ default .Release.Namespace .Values.Master.OperationsCenterNamespace }}
+  labels:
+{{ include "cloudbees-core.labels" . | indent 4 }}
+  annotations:
+{{ include "cascBundleService.ingress.annotations" . | indent 4}}
+spec:
+  {{- if .Values.OperationsCenter.Ingress.Class }}
+  ingressClassName: {{ .Values.OperationsCenter.Ingress.Class }}
+  {{- end }}
+  rules:
+    - http:
+        paths:
+          - path: /casc-bundle-service
+            backend:
+              service:
+                name: {{ include "cascBundleService.serviceName" . }}
+                port:
+                  number: 80
+            pathType: Prefix
+{{- if (include "cascBundleService.hostnamewithoutport" . ) }}
+      host: {{ include "cascBundleService.hostnamewithoutport" . | quote }}
+{{- end }}
+{{- if .Values.OperationsCenter.Ingress.tls.Enable }}
+  tls:
+    - hosts:
+        - {{ include "cascBundleService.hostnamewithoutport" .  | quote }}
+      secretName: {{ .Values.OperationsCenter.Ingress.tls.SecretName }}
+{{- end -}}
+{{- else }}
+# CascBundleService ingress is not enabled
+{{- end -}}

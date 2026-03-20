@@ -1,0 +1,19 @@
+{{- if .Values.Master.Enabled -}}
+{{- if .Values.Master.HighAvailabilitySupport -}}
+{{- if .Values.rbac.install -}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: controller-hazelcast-discovery
+  labels:
+{{ include "cloudbees-core.labels" . | indent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: controller-hazelcast-discovery
+subjects:
+- kind: ServiceAccount
+  name: {{ .Values.rbac.masterServiceAccountName }}
+{{- end -}}
+{{- end -}}
+{{- end -}}

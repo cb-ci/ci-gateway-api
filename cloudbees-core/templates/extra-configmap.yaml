@@ -1,0 +1,22 @@
+{{- if .Values.OperationsCenter.Enabled -}}
+{{- if .Values.OperationsCenter.ExtraConfigMaps -}}
+{{- range .Values.OperationsCenter.ExtraConfigMaps }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .name }}
+  labels:
+{{ include "cloudbees-core.labels" $ | indent 4 }} # https://github.com/helm/helm/issues/1311#issuecomment-435030457
+{{- if .labels }}
+{{ toYaml .labels | indent 4}}
+{{- end }}
+{{- if .annotations }}
+  annotations:
+{{ toYaml .annotations | indent 4}}
+{{- end }}
+data:
+{{ toYaml .data | indent 2 }}
+{{- end -}}
+{{- end -}}
+{{- end -}}

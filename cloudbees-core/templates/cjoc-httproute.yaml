@@ -1,0 +1,27 @@
+{{- template "validate.gateway" . -}}
+{{- if and .Values.OperationsCenter.Enabled (include "cloudbees-core.needs-httproute" .) -}}
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: cjoc
+  labels:
+{{ include "cloudbees-core.labels" . | indent 4 }}
+spec:
+  parentRefs:
+  - name: {{ ((.Values.OperationsCenter).Gateway).Name | quote }}
+{{- if ((.Values.OperationsCenter).Gateway).Namespace }}
+    namespace: {{ ((.Values.OperationsCenter).Gateway).Namespace | quote }}
+{{- end }}
+{{- if (include "oc.hostnamewithoutport" .) }}
+  hostnames:
+  - {{ include "oc.hostnamewithoutport" . | quote }}
+{{- end }}
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: {{ include "oc.ingresspath" . | quote }}
+    backendRefs:
+    - name: cjoc
+      port: 80
+{{- end -}}

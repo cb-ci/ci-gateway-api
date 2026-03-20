@@ -1,0 +1,20 @@
+{{ template "validate.operationscenter" . }}
+{{- if and (or .Values.OperationsCenter.Enabled .Values.Master.OperationsCenterNamespace) (.Values.rbac.install) (.Values.SsoRelay.enabled) -}}
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: cjoc-sso-relay
+  labels: {{- include "cloudbees-core.labels" . | nindent 4 }}
+rules:
+- apiGroups:
+    - ""
+  resources:
+    - configmaps
+  resourceNames:
+    - {{ include "ssorelay.configmapname" . | quote }}
+  verbs:
+    - create
+    - get
+    - update
+    - patch
+{{- end }}
