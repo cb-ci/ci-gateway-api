@@ -7,8 +7,10 @@ This repository contains scripts and configurations to deploy CloudBees CI on Go
 Traditional GKE Ingress is being succeeded by the Gateway API, which provides a more expressive and role-oriented approach to networking. This setup demonstrates how to:
 
 - Provision a **Regional External Application Load Balancer** via the GKE Gateway controller.
+- Deploy  a **Gateway** to route traffic to the CloudBees CI cluster.
 - Configure **TLS Termination** using Kubernetes secrets.
 - Implement a **HealthCheckPolicy** to handle CloudBees CI's custom health paths.
+- Enable **GCPBackendPolicy** for sticky sessions for the HA controller.
 - Deploy CloudBees CI Operations Center (`cjoc`) via Helm.
 
 ## Prerequisites
@@ -16,7 +18,7 @@ Traditional GKE Ingress is being succeeded by the Gateway API, which provides a 
 - A GKE cluster (version 1.24+ recommended).
 - Gateway API CRDs installed and the Gateway controller enabled.
 - `gcloud`, `kubectl`, and `helm` CLI tools configured.
-- Self-signed or CA-signed certificates (`jenkins.pem` and `server.key`) in the root directory.
+- Self-signed or CA-signed certificates (`jenkins.pem` and `server.key`) in the root directory. (see `./generate-certs.sh` for an example of how to generate self-signed certificates)
 
 ## Getting Started
 
