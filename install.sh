@@ -1,53 +1,77 @@
 #!/bin/bash
-NAMESPACE=cloudbees-gatewayapi
-GATEWAY_NAME=cloudbees-gateway
-CJOC_HOST_NAME=gateway.acaternberg.flow-training.beescloud.com
+set -eo pipefail
 
-REGION=us-east1 && MACHINE_TYPE=n1-standard-8
-CLUSTER_NAME=cb-ci
-ZONE=us-east1-d
-set -x
+# --- Configuration ---
+NAMESPACE=${NAMESPACE:-cloudbees-gatewayapi}
+GATEWAY_NAME=${GATEWAY_NAME:-cloudbees-gateway}
+CJOC_HOST_NAME=${CJOC_HOST_NAME:-gateway.acaternberg.flow-training.beescloud.com}
+SERVICE_NAME=${SERVICE_NAME:-ha}
+CONTROLLER_NAME=${CONTROLLER_NAME:-ha}
 
-# Enable gateway API
-gcloud container clusters update $CLUSTER_NAME \
-     --gateway-api=standard \
-     --zone $ZONE 
-# Enable certificate manager. We dont use it in this examples, we use self signed certs
-# gcloud services enable certificatemanager.googleapis.com
-
-# Create a proxy only subnet for the gateway. Not sure , if we realy ned this
-gcloud compute networks subnets create proxy-only-subnet \
-  --purpose=REGIONAL_MANAGED_PROXY \
-  --role=ACTIVE \
-  --region=$REGION \
-  --network=default \
-  --range=10.10.0.0/23 || true
-
-# Create a self signed cert
-# ./generate-self-signed-cert.sh
-
-# Create namespace to deploy cloudbees core and gateway api resources
-kubectl create namespace $NAMESPACE || true
-
-# Create a secret with the self signed cert
+REGION=${REGION:-us-east1}
+ZONE=${ZONE:-us-east1-d}
+CLUSTER_NAME=${CLUSTER_NAME:-cb-ci}
 CERT_NAME=acaternberg-cert-selfsigned
-kubectl delete secret $CERT_NAME -n $NAMESPACE || true
-kubectl create secret tls $CERT_NAME --cert="./jenkins.pem" --key="./server.key" -n $NAMESPACE || exit 1
 
-# Get gateway classes, CRDs and gateway
-kubectl get gatewayclasses
-kubectl get crd | grep gateway.networking.k8s.io
+# --- Colors for Logging ---
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+NC='\033[0m'
 
+log() { echo -e "${BLUE}[$(date +'%Y-%m-%dT%H:%M:%S')]${NC} $1"; }
+error() { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
+success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
 
-# Create a gateway and bind it to the cloudbees-gatewayapi namespace
-# gatewayClassName: gke-l7-gxlb # gke-l7-regional-external-managed
-#kubectl delete gateway $GATEWAY_NAME -n $NAMESPACE || true
+# --- Prerequisite Checks ---
+log "Checking prerequisites..."
+[[ -f "./jenkins.pem" ]] || error "jenkins.pem not found in current directory."
+[[ -f "./server.key" ]] || error "server.key not found in current directory."
+
+# --- GKE Configuration ---
+log "Ensuring Gateway API is enabled on cluster ${CLUSTER_NAME}..."
+if ! gcloud container clusters describe "${CLUSTER_NAME}" --zone "${ZONE}" --format="value(status)" &>/dev/null; then
+    error "Cluster ${CLUSTER_NAME} not found in zone ${ZONE}."
+fi
+
+# Check if Gateway API is already standard
+GW_API_STATUS=$(gcloud container clusters describe "${CLUSTER_NAME}" --zone "${ZONE}" --format="value(gatewayConfig.enabled)" 2>/dev/null || echo "false")
+if [[ "$GW_API_STATUS" != "true" ]]; then
+    log "Enabling Gateway API (standard)..."
+    gcloud container clusters update "${CLUSTER_NAME}" --gateway-api=standard --zone "${ZONE}"
+else
+    log "Gateway API already enabled."
+fi
+
+# --- Network Configuration ---
+log "Checking for proxy-only subnet in ${REGION}..."
+if ! gcloud compute networks subnets describe proxy-only-subnet --region="${REGION}" &>/dev/null; then
+    log "Creating proxy-only subnet..."
+    gcloud compute networks subnets create proxy-only-subnet \
+      --purpose=REGIONAL_MANAGED_PROXY \
+      --role=ACTIVE \
+      --region="${REGION}" \
+      --network=default \
+      --range=10.10.0.0/23
+else
+    log "Proxy-only subnet already exists."
+fi
+
+# --- Kubernetes Resources ---
+log "Configuring Kubernetes resources in namespace ${NAMESPACE}..."
+kubectl create namespace "${NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f -
+
+log "Updating TLS secret ${CERT_NAME}..."
+kubectl delete secret "${CERT_NAME}" -n "${NAMESPACE}" --ignore-not-found
+kubectl create secret tls "${CERT_NAME}" --cert="./jenkins.pem" --key="./server.key" -n "${NAMESPACE}"
+
+log "Applying GKE Gateway resources..."
 cat <<EOF | kubectl apply -f -
-kind: Gateway
 apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
 metadata:
-  name: $GATEWAY_NAME
-  namespace: $NAMESPACE
+  name: ${GATEWAY_NAME}
+  namespace: ${NAMESPACE}
   annotations:
     cloud.google.com/neg: '{"ingress": true}'
 spec: 
@@ -59,21 +83,16 @@ spec:
     tls:
       mode: Terminate
       certificateRefs:
-      - name: $CERT_NAME
+      - name: ${CERT_NAME}
     allowedRoutes:
       namespaces:
         from: All
-EOF
-
-
-
-# Apply health check policy for cjoc
-cat <<EOF | kubectl apply -f -
+---
 apiVersion: networking.gke.io/v1
 kind: HealthCheckPolicy
 metadata:
   name: cjoc-health-check-policy
-  namespace: $NAMESPACE
+  namespace: ${NAMESPACE}
 spec:
   default:
     checkIntervalSec: 10
@@ -90,17 +109,12 @@ spec:
     group: ""
     kind: Service
     name: cjoc
-EOF
-
-#Apply health check policy for Controller 
-export CONTROLLER_NAME=ha
-export SERVICE_NAME=ha
-cat <<EOF | kubectl apply -f -
+---
 apiVersion: networking.gke.io/v1
 kind: HealthCheckPolicy
 metadata:
-  name: $CONTROLLER_NAME-health-check-policy
-  namespace: cloudbees-gatewayapi
+  name: ${CONTROLLER_NAME}-health-check-policy
+  namespace: ${NAMESPACE}
 spec:
   default:
     checkIntervalSec: 10
@@ -110,23 +124,19 @@ spec:
     config:
       type: HTTP
       httpHealthCheck:
-        requestPath: /$CONTROLLER_NAME/health/
+        requestPath: /${CONTROLLER_NAME}/health/
     logConfig:
       enabled: true
   targetRef:
     group: ""
     kind: Service
-    name: $SERVICE_NAME
-EOF
-
-
-# Enable sticky sessions for ha controller 
-cat <<EOF | kubectl apply -f -
+    name: ${SERVICE_NAME}
+---
 apiVersion: networking.gke.io/v1
 kind: GCPBackendPolicy
 metadata:
   name: cloudbees-sticky-policy
-  namespace: cloudbees-gatewayapi
+  namespace: ${NAMESPACE}
 spec:
   default:
     sessionAffinity:
@@ -137,46 +147,51 @@ spec:
   targetRef:
     group: ""
     kind: Service
-    name: $SERVICE_NAME
+    name: ${SERVICE_NAME}
 EOF
 
-# cat <<EOF | kubectl apply -f -
-# apiVersion: networking.gke.io/v1
-# kind: GCPBackendPolicy
-# metadata:
-#   name: cloudbees-sticky-policy
-#   namespace: cloudbees-gatewayapi
-# spec:
-#   default:
-#     sessionPersistence:
-#       sessionAffinity: HTTP_COOKIE
-#       httpCookie:
-#         name: "cloudbees-sticky-session"
-#         ttl: "3600s" # 1 hour
-#     # Required for HTTP_COOKIE to function correctly
-#     localityLbAlgorithm: MAGLEV
-#   targetRef:
-#     group: ""
-#     kind: Service
-#     name: ha
-# EOF
+# --- Helm Deployment ---
+log "Updating Helm repositories..."
+helm repo add cloudbees https://charts.cloudbees.com/public/cloudbees || true
+helm repo update
 
-
-
-helm repo update 
-
+log "Deploying CloudBees CI via Helm..."
 helm upgrade --install cloudbees-core-gwapi cloudbees/cloudbees-core \
-  --namespace $NAMESPACE \
+  --namespace "${NAMESPACE}" \
   --set Gateway.Enabled=true \
-  --set OperationsCenter.Gateway.Name=$GATEWAY_NAME \
+  --set OperationsCenter.Gateway.Name="${GATEWAY_NAME}" \
   --set OperationsCenter.Gateway.SectionName=https \
-  --set OperationsCenter.Gateway.Namespace=$NAMESPACE \
-  --set OperationsCenter.HostName=$CJOC_HOST_NAME \
+  --set OperationsCenter.Gateway.Namespace="${NAMESPACE}" \
+  --set OperationsCenter.HostName="${CJOC_HOST_NAME}" \
   --set OperationsCenter.Protocol=https \
   --set Agents.SeparateNamespace.Enabled=false \
-  --set Common.image.tag='latest' \
-  --create-namespace
+  --set Common.image.tag='latest'
 
-# Get the gateway and check the status, wait a while for IP and adjustr the CLOUD_DNS A record to point to the gateway IP
-kubectl get gateway $GATEWAY_NAME -n $NAMESPACE
+# --- Wait for Gateway IP ---
+log "Waiting for Gateway External IP (this may take a few minutes)..."
+GATEWAY_IP=""
+MAX_RETRIES=30
+RETRY_COUNT=0
+
+while [[ -z "$GATEWAY_IP" && $RETRY_COUNT -lt $MAX_RETRIES ]]; do
+    GATEWAY_IP=$(kubectl get gateway "${GATEWAY_NAME}" -n "${NAMESPACE}" -o jsonpath='{.status.addresses[0].value}' 2>/dev/null || echo "")
+    if [[ -z "$GATEWAY_IP" ]]; then
+        echo -n "."
+        sleep 10
+        ((RETRY_COUNT++))
+    fi
+done
+
+if [[ -n "$GATEWAY_IP" ]]; then
+    echo ""
+    success "Gateway is ready!"
+    log "External IP: ${GATEWAY_IP}"
+    log "Operations Center URL: https://${CJOC_HOST_NAME}/cjoc/"
+    log "Post-install: Update your DNS A record for ${CJOC_HOST_NAME} to ${GATEWAY_IP}"
+else
+    echo ""
+    error "Timed out waiting for Gateway External IP. Please check 'kubectl get gateway -n ${NAMESPACE}' later."
+fi
+
+success "Installation logic completed successfully."
 
