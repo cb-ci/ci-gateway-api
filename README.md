@@ -48,8 +48,6 @@ For a detailed look at the traffic flow and component relationships, see [DIAGRA
 ### Key Components
 
 - **`install.sh`**: Main orchestration script.
-- **`healthcheckpolicy.yaml`**: Ensures the GCP Load Balancer probes `/cjoc/health/` to correctly identify pod readiness.
-- **`cloudbees-core/`**: Contains the CloudBees CI Helm chart and values.
 
 ## Troubleshooting
 
