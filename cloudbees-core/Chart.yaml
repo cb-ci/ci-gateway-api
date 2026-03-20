@@ -1,0 +1,17 @@
+annotations:
+  artifacthub.io/links: |
+    - name: Product overview
+      url: https://www.cloudbees.com/products/continuous-integration
+    - name: Documentation
+      url: https://docs.cloudbees.com/docs/cloudbees-ci/latest/
+apiVersion: v2
+appVersion: 2.541.3.36065
+description: Enterprise Continuous Integration with Jenkins
+home: https://www.cloudbees.com/products/continuous-integration
+icon: https://images.ctfassets.net/vtn4rfaw6n2j/7xprMMXARXDBuVxW4y8XfV/349fff91035050e3f2a8ff37bc0615b5/cloudbees-core-logo_header.svg
+keywords:
+- cloudbees
+- jenkins
+kubeVersion: '>= 1.31.0-0'
+name: cloudbees-core
+version: 3.36066.0+c2a28249dbbe

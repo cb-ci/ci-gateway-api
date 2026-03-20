@@ -1,0 +1,24 @@
+{{- if and .Values.rbac.install (eq (include "rbac.masterSeparateServiceAccount" .) "true") -}}
+{{- if eq (include "isTokenReviewEnabled" .) "true" -}}
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: auth-tokenreviews-{{ .Release.Namespace }}
+  labels:
+{{ include "cloudbees-core.labels" . | indent 4 }}
+rules:
+- apiGroups:
+  - authentication.k8s.io
+  resources:
+  - tokenreviews
+  verbs:
+  - create
+  - get
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - rolebindings
+  verbs:
+  - list
+{{- end -}}
+{{- end -}}

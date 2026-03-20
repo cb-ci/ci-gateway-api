@@ -1,0 +1,25 @@
+{{- if .Values.Master.Enabled -}}
+{{- if .Values.rbac.install -}}
+{{- if eq (include "rbac.masterSeparateServiceAccount" .) "true" -}}
+# This is needed for OC to grant cjoc-agents role to controllers when rbac.masterSeparateServiceAccount
+# Otherwise K8s does not allow OC to create the role binding for controllers (adding permission that the
+# origin SA does not hold)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: cjoc-builds-role-binding
+  namespace: {{ template "agents.namespace" . }}
+  labels:
+{{ include "cloudbees-core.labels" . | indent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: cjoc-agents
+subjects:
+- kind: ServiceAccount
+  name: {{ .Values.rbac.serviceAccountName }}
+  namespace: {{ default .Release.Namespace .Values.Master.OperationsCenterNamespace }}
+{{- include "rbac.group-subject" . }}
+{{- end -}}
+{{- end -}}
+{{- end -}}

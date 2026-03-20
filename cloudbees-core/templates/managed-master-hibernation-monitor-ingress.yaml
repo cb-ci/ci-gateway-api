@@ -1,0 +1,42 @@
+{{- if and .Values.Hibernation.Enabled (include "cloudbees-core.needs-ingress" .) -}}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: managed-master-hibernation-monitor
+  labels:
+{{ include "cloudbees-core.labels" . | indent 4 }}
+  annotations:
+{{ include "hibernationMonitor.ingress.annotations" . | indent 4}}
+spec:
+{{- if .Values.OperationsCenter.Ingress.Class }}
+  ingressClassName: {{ .Values.OperationsCenter.Ingress.Class }}
+{{- end }}
+  rules:
+  - http:
+      paths:
+      - path: /hibernation/ns/{{ .Release.Namespace }}/
+        backend:
+          service:
+            name: managed-master-hibernation-monitor
+            port:
+              number: 80
+        pathType: Prefix
+{{- if .Values.OperationsCenter.Enabled }}
+      - path: /hibernation/
+        backend:
+          service:
+            name: managed-master-hibernation-monitor
+            port:
+              number: 80
+        pathType: Prefix
+{{- end }}
+{{- if (include "hibernation.hostnamewithoutport" . ) }}
+    host: {{ include "hibernation.hostnamewithoutport" . | quote }}
+{{- end }}
+{{- if .Values.OperationsCenter.Ingress.tls.Enable }}
+  tls:
+    - hosts:
+        - {{ include "hibernation.hostnamewithoutport" .  | quote }}
+      secretName: {{ .Values.OperationsCenter.Ingress.tls.SecretName }}
+{{- end -}}
+{{- end -}}

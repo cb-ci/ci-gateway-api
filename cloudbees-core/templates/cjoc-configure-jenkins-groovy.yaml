@@ -1,0 +1,16 @@
+{{- if .Values.OperationsCenter.Enabled -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cjoc-configure-jenkins-groovy
+  labels:
+{{ include "cloudbees-core.labels" . | indent 4 }}
+data:
+  location.groovy: |
+{{- if (include "oc.hostnamewithoutport" .) }}
+    jenkins.model.JenkinsLocationConfiguration.get().setUrl("{{- template "oc.url" . -}}")
+{{- end }}
+{{- if .Values.OperationsCenter.ExtraGroovyConfiguration }}
+{{ tpl (toYaml .Values.OperationsCenter.ExtraGroovyConfiguration) . | indent 2}}
+{{- end }}
+{{- end -}}

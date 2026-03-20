@@ -1,0 +1,17 @@
+{{- if and .Values.SsoRelay.enabled .Values.SsoRelay.podDisruptionBudget.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{.Values.SsoRelay.controller.name}}
+  namespace: {{ include "ssorelay.namespace" . | quote }}
+  labels: {{- include "ssorelay.labels" . | nindent 4 }}
+spec:
+  {{- with .Values.SsoRelay.podDisruptionBudget.minAvailable }}
+  minAvailable: {{ . }}
+  {{- end }}
+  {{- with .Values.SsoRelay.podDisruptionBudget.maxUnavailable }}
+  maxUnavailable: {{ . }}
+  {{- end }}
+  selector:
+    matchLabels: {{- include "ssorelay.labels" . | nindent 6 }}
+{{- end }}

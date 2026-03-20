@@ -1,0 +1,23 @@
+{{ template "validate.operationscenter" . }}
+{{- if or (.Values.OperationsCenter.Enabled) (.Values.Master.OperationsCenterNamespace) -}}
+{{- if .Values.Agents.SeparateNamespace.Enabled -}}
+{{- if .Values.rbac.install -}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: cjoc-agents-role-binding
+  namespace: {{ template "agents.namespace" . }}
+  labels:
+{{ include "cloudbees-core.labels" . | indent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: cjoc-agents-test-connection
+subjects:
+- kind: ServiceAccount
+  name: {{ .Values.rbac.serviceAccountName }}
+  namespace: {{ default .Release.Namespace .Values.Master.OperationsCenterNamespace }}
+{{- include "rbac.group-subject" . }}
+{{- end -}}
+{{- end -}}
+{{- end -}}

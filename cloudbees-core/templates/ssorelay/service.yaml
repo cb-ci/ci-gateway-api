@@ -1,0 +1,15 @@
+{{- if .Values.SsoRelay.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{.Values.SsoRelay.controller.name}}
+  namespace: {{ include "ssorelay.namespace" . | quote }}
+  labels: {{- include "ssorelay.labels" . | nindent 4 }}
+spec:
+    type: ClusterIP
+    ports:
+    - name: http
+      port: 80
+      targetPort: 8080
+    selector: {{- include "ssorelay.labels" . | nindent 6 }}
+{{- end }}

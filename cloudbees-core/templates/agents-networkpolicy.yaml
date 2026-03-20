@@ -1,0 +1,12 @@
+{{- if and .Values.NetworkPolicy.Enabled .Values.Agents.Enabled -}}
+# Deny all traffic to agents
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: agents
+  namespace: {{ template "agents.namespace" . }}
+  labels:
+{{ include "cloudbees-core.labels" . | indent 4 }}
+spec:
+{{ include "agent.podSelector" . | indent 2 }}
+{{- end }}

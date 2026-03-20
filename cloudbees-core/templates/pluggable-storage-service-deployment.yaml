@@ -1,0 +1,168 @@
+{{- if .Values.PluggableStorageService.enabled -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pluggable-storage-service
+  namespace: {{ default .Release.Namespace .Values.Master.OperationsCenterNamespace }}
+  labels:
+    app: pluggable-storage-service
+{{ include "cloudbees-core.labels" . | indent 4 }}
+spec:
+  replicas: {{ .Values.PluggableStorageService.replicas }}
+  selector:
+    matchLabels:
+      app: pluggable-storage-service
+  template:
+    metadata:
+      labels:
+        app: pluggable-storage-service
+{{ include "cloudbees-core.labels" . | indent 8 }}
+      {{- if eq .Values.PluggableStorageService.storageBackend "AZURE_BLOB_STORAGE" }}
+        azure.workload.identity/use: "true"
+      {{- end }}
+      {{- if .Values.PluggableStorageService.annotations }}
+      annotations:
+      {{ toYaml .Values.PluggableStorageService.annotations | indent 8 }}
+      {{- end }}
+    spec:
+      affinity:
+        nodeAffinity:
+          # Schedule on Linux nodes only.
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: kubernetes.io/os
+                operator: In
+                values:
+                  - linux
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 1
+              # Prefer nodes where there are no masters
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchExpressions:
+                    - key: com.cloudbees.cje.type
+                      operator: In
+                      values:
+                        - master
+            - weight: 1
+              # Prefer nodes where there are no agents
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchExpressions:
+                    - key: jenkins
+                      operator: In
+                      values:
+                        - slave
+      {{- with .Values.PluggableStorageService.podSecurityContext }}
+      securityContext: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      containers:
+      - name: pluggable-storage-service
+        image: {{ include "PluggableStorageService.image" . }}
+        {{- with (include "PluggableStorageService.imagePullPolicy" .) }}
+        imagePullPolicy: {{ . }}
+        {{- end }}
+        {{- with .Values.PluggableStorageService.containerSecurityContext }}
+        securityContext: {{- toYaml . | nindent 10 }}
+        {{- end }}
+        ports:
+        - containerPort: 8080
+          name: {{ .Values.OperationsCenter.ContainerPortName }}
+          protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: /q/health/live
+            port: {{ .Values.OperationsCenter.ContainerPortName }}
+          periodSeconds: 30
+          timeoutSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /q/health/ready
+            port: {{ .Values.OperationsCenter.ContainerPortName }}
+          periodSeconds: 30
+          timeoutSeconds: 10
+        resources:
+          requests:
+            cpu: "{{ .Values.PluggableStorageService.resources.requests.cpu }}"
+            memory: "{{ .Values.PluggableStorageService.resources.requests.memory }}"
+          limits:
+            {{- if ne (.Values.PluggableStorageService.resources.limits.cpu | toString) "0" }}
+            cpu: "{{ .Values.PluggableStorageService.resources.limits.cpu }}"
+            {{- end }}
+            memory: "{{ .Values.PluggableStorageService.resources.limits.memory }}"
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        env:
+          - name: PLUGGABLE_STORAGE_RETRIEVER
+            value: {{ .Values.PluggableStorageService.storageBackend | quote }}
+          - name: PLUGGABLE_STORAGE_BUCKET_NAME
+            value: {{ .Values.PluggableStorageService.storageBucket | required ".PluggableStorageService.storageBucket must be set" | quote }}
+          - name: PLUGGABLE_STORAGE_OBJECT_NAME_PREFIX
+            value: {{ .Values.PluggableStorageService.storageObjectNamePrefix | quote }}
+          - name: PLUGGABLE_STORAGE_PRESIGNED_URL_EXPIRY_MINUTES
+            value: {{ .Values.PluggableStorageService.storagePresignedUrlExpiryMinutes | quote }}
+          {{- if eq .Values.PluggableStorageService.storageBackend "AMAZON_S3" }}
+          {{- if .Values.PluggableStorageService.storageOptionsS3.region }}
+          - name: QUARKUS_S3_AWS_REGION
+            value: {{ .Values.PluggableStorageService.storageOptionsS3.region }}
+          {{- end }}
+          {{- if .Values.PluggableStorageService.storageOptionsS3.endpointOverride }}
+          - name: QUARKUS_S3_ENDPOINT_OVERRIDE
+            value: {{ .Values.PluggableStorageService.storageOptionsS3.endpointOverride }}
+          {{- end }}
+          {{- if .Values.PluggableStorageService.storageOptionsS3.pathStyleAccess }}
+          - name: QUARKUS_S3_PATH_STYLE_ACCESS
+            value: {{ .Values.PluggableStorageService.storageOptionsS3.pathStyleAccess | quote }}
+          {{- end }}
+          {{- if .Values.PluggableStorageService.storageOptionsS3.ipv6Only }}
+          - name: AWS_EC2_METADATA_SERVICE_ENDPOINT_MODE
+            value: IPv6
+          {{- end }}
+          {{- if .Values.PluggableStorageService.storageOptionsS3.staticCredentialsSecret }}
+          - name: QUARKUS_S3_AWS_CREDENTIALS_TYPE
+            value: static
+          - name: QUARKUS_S3_AWS_CREDENTIALS_STATIC_PROVIDER_ACCESS_KEY_ID
+            valueFrom:
+              secretKeyRef:
+                name: "{{ .Values.PluggableStorageService.storageOptionsS3.staticCredentialsSecret }}"
+                key: AWS_ACCESS_KEY_ID
+          - name: QUARKUS_S3_AWS_CREDENTIALS_STATIC_PROVIDER_SECRET_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: "{{ .Values.PluggableStorageService.storageOptionsS3.staticCredentialsSecret }}"
+                key: AWS_SECRET_ACCESS_KEY
+          - name: QUARKUS_S3_AWS_CREDENTIALS_STATIC_PROVIDER_SESSION_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: "{{ .Values.PluggableStorageService.storageOptionsS3.staticCredentialsSecret }}"
+                key: AWS_SESSION_TOKEN
+                optional: true
+          {{- end }}
+          {{- end }}
+          {{- if eq .Values.PluggableStorageService.storageBackend "AZURE_BLOB_STORAGE" }}
+          - name: QUARKUS_AZURE_STORAGE_BLOB_ENDPOINT
+            value: {{ .Values.PluggableStorageService.storageOptionsAzureBlobStorage.endpoint }}
+          {{- end }}
+          {{- if .Values.PluggableStorageService.javaOpts }}
+          - name: JAVA_OPTS_APPEND
+            value: {{ .Values.PluggableStorageService.javaOpts }}
+          {{- end }}
+      serviceAccountName: {{ .Values.rbac.pluggableStorageServiceServiceAccountName }}
+      enableServiceLinks: false
+      {{- if .Values.PluggableStorageService.nodeSelector }}
+      nodeSelector:
+{{ toYaml .Values.PluggableStorageService.nodeSelector | indent 8 }}
+      {{- end }}
+      {{- if .Values.PluggableStorageService.tolerations }}
+      tolerations:
+{{ toYaml .Values.PluggableStorageService.tolerations | indent 8 }}
+      {{- end }}
+{{- end -}}

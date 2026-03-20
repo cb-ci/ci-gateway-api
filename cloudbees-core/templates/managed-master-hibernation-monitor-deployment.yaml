@@ -1,0 +1,113 @@
+{{- if .Values.Hibernation.Enabled -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: managed-master-hibernation-monitor
+  labels:
+    app: managed-master-hibernation-monitor
+    # TODO app.kubernetes.io/component?
+{{ include "cloudbees-core.labels" . | indent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: managed-master-hibernation-monitor
+  template:
+    metadata:
+      labels:
+        app: managed-master-hibernation-monitor
+{{ include "cloudbees-core.labels" . | indent 8 }}
+    spec:
+      affinity:
+        nodeAffinity:
+          # Schedule on Linux nodes only.
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: kubernetes.io/os
+                operator: In
+                values:
+                  - linux
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 1
+              # Prefer nodes where there are no masters
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchExpressions:
+                    - key: com.cloudbees.cje.type
+                      operator: In
+                      values:
+                        - master
+      securityContext:
+        {{- toYaml .Values.Hibernation.PodSecurityContext | nindent 8 }}
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      {{- if .Values.Hibernation.Protected }}
+      - name: secret
+        secret:
+          secretName: managed-master-hibernation-monitor-protected
+          optional: true
+      {{- end }}
+      containers:
+      - name: managed-master-hibernation-monitor
+        image: {{ include "hibernation.image" . }}
+        {{- if (include "hibernation.imagePullPolicy" .) }}
+        imagePullPolicy: {{ include "hibernation.imagePullPolicy" . }}
+        {{- end }}
+        securityContext:
+          {{- toYaml .Values.Hibernation.SecurityContext | nindent 10 }}
+        args:
+          - '-Dcom.cloudbees.networking.useSubdomain={{ default "false" (include "cloudbees-core.use-subdomain" .) }}'
+          - '-Dcom.cloudbees.networking.routeNonnamespacedURLs={{- include "hibernation.routenonnamespacedurls" . }}'
+          {{- if .Values.Hibernation.JavaOpts }}
+          {{- range .Values.Hibernation.JavaOpts }}
+          - {{ quote . }}
+          {{- end }}
+          {{- end }}
+        ports:
+        - containerPort: 8080
+          name: {{ .Values.OperationsCenter.ContainerPortName }}
+          protocol: TCP
+        readinessProbe:
+          httpGet:
+            path: /q/health/ready
+            port: 8080
+          periodSeconds: 30
+          timeoutSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /q/health/live
+            port: 8080
+          periodSeconds: 30
+          timeoutSeconds: 30
+        resources:
+          requests:
+            cpu: "{{ .Values.Hibernation.Resources.Requests.Cpu }}"
+            memory: "{{ .Values.Hibernation.Resources.Requests.Memory }}"
+          limits:
+            {{- if ne (.Values.Hibernation.Resources.Limits.Cpu | toString) "0" }}
+            cpu: "{{ .Values.Hibernation.Resources.Limits.Cpu }}"
+            {{- end }}
+            memory: "{{ .Values.Hibernation.Resources.Limits.Memory }}"
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        {{- if .Values.Hibernation.Protected }}
+        - name: secret
+          mountPath: /var/run/secrets/hibernation
+          readOnly: true
+        {{- end }}
+      serviceAccountName: {{ .Values.rbac.hibernationMonitorServiceAccountName }}
+      enableServiceLinks: false
+      {{- if .Values.Hibernation.NodeSelector }}
+      nodeSelector:
+{{ toYaml .Values.Hibernation.NodeSelector | indent 8 }}
+      {{- end }}
+      {{- if .Values.Hibernation.Tolerations }}
+      tolerations:
+{{ toYaml .Values.Hibernation.Tolerations | indent 8 }}
+      {{- end }}
+{{- end -}}

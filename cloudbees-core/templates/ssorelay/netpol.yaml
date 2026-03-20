@@ -1,0 +1,16 @@
+{{- if and .Values.SsoRelay.enabled .Values.NetworkPolicy.Enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{.Values.SsoRelay.controller.name}}
+  namespace: {{ include "ssorelay.namespace" . | quote }}
+  labels: {{- include "ssorelay.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels: {{- include "ssorelay.labels" . | nindent 6 }}
+  ingress:
+  - ports:
+    - port: 8080
+      protocol: TCP
+    from: {{- concat (fromYamlArray (include "operationsCenter.podSelectors" .)) (fromYamlArray (include "master.podSelectors" .)) (fromYamlArray (include "ingress.podSelectors" .)) | toYaml | nindent 4}}
+{{- end -}}

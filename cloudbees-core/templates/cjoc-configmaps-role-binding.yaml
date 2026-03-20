@@ -1,0 +1,18 @@
+{{ template "validate.operationscenter" . }}
+{{- if and .Values.rbac.install .Values.CascBundleService.enabled -}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: cjoc-configmaps-role-binding
+  namespace: {{ default .Release.Namespace .Values.Master.OperationsCenterNamespace }}
+  labels:
+{{ include "cloudbees-core.labels" . | indent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: cjoc-configmaps-role
+subjects:
+- kind: ServiceAccount
+  name: {{ .Values.rbac.serviceAccountName }}
+  namespace: {{ default .Release.Namespace .Values.Master.OperationsCenterNamespace }}
+{{- end -}}

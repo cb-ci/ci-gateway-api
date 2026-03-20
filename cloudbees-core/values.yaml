@@ -1,0 +1,793 @@
+# Default values for CloudBees Core
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+# Gateway -- Enable Kubernetes Gateway API mode for CloudBees CI networking.
+# Experimental feature, not supported and subject to change without notice.
+# When true: Creates HTTPRoute resources instead of Ingress resources.
+# When false (default): Creates traditional Ingress resources for routing traffic
+#
+# Prerequisites when Gateway=true:
+#   1. Gateway API CRDs must be installed in the cluster.
+#   2. A Gateway controller must be installed (e.g., Istio, Envoy Gateway, Kong, Traefik).
+#   3. A Gateway resource must exist.
+#   4. OperationsCenter.Gateway.Name must be set to reference the Gateway resource.
+Gateway: false
+# Subdomain -- Whether to use a DNS subdomain for each controller.
+Subdomain: false
+# SubdomainServicePrefix -- Experimental, do not use yet without consulting CloudBees support
+SubdomainServicePrefix: ''
+SsoRelay:
+  # -- Whether to enable installation of SSO Relay
+  enabled: false
+  controller:
+    name: cloudbees-sso-relay
+    # -- name of the configmap to read for trusting connections from controllers
+    configMapName: cloudbees-sso-relay-trusted-controllers
+    # -- number of replicas of the sso relay deployment
+    replicas: 1
+    # -- custom pod security context https://kubernetes.io/docs/tasks/configure-pod-container/security-context/#set-the-security-context-for-a-pod
+    securityContext: {}
+    # -- Annotations to put on the pod running SSO Relay
+    annotations: {}
+    # -- Custom java options to pass to the SSO Relay process
+    javaOpts: null
+    image:
+      registry: null
+      repository: sso-relay-service
+      tag: 141.ee5267746089
+      pullPolicy: IfNotPresent
+    # -- Name of image pull secret to pull private Docker images or an array of image pull secrets
+    imagePullSecrets: null
+    affinity:
+      nodeAffinity:
+        # Schedule on Linux nodes only.
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+            - matchExpressions:
+                - key: kubernetes.io/os
+                  operator: In
+                  values:
+                    - linux
+    nodeSelector: {}
+    tolerations: []
+    container:
+      # -- custom container security context -- https://kubernetes.io/docs/tasks/configure-pod-container/security-context/#set-the-security-context-for-a-container
+      securityContext: {}
+      # -- container resources
+      resources:
+        requests:
+          cpu: "100m"
+          memory: 500Mi
+        limits:
+          memory: 500Mi
+  podDisruptionBudget:
+    # -- Whether to enable a PodDisruptionBudget for SSO Relay
+    enabled: true
+    # -- Minimum number of available pods during a disruption
+    minAvailable: 1
+    # -- Maximum number of unavailable pods during a disruption. Can't be used with minAvailable
+    maxUnavailable: null
+# Operations Center options
+OperationsCenter:
+  # OperationsCenter.Enabled -- Disable for particular use case like setting up namespaces to host masters only
+  Enabled: true
+  # Operations Center container image
+  image:
+    # OperationsCenter.image.registry -- Docker registry for Operations Center
+    registry: null
+    # OperationsCenter.image.repository -- Docker image repository for Operations Center
+    repository: 'cloudbees-cloud-core-oc'
+    # OperationsCenter.image.tag -- Docker image tag for Operations Center
+    tag: null
+    # OperationsCenter.image.pullPolicy -- https://kubernetes.io/docs/concepts/containers/images/#updating-images
+    pullPolicy: null
+  # Image pull secrets
+  # Enable this option when using a private registry.
+  # https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/#create-a-secret-by-providing-credentials-on-the-command-line
+  # OperationsCenter.ImagePullSecrets -- Name of image pull secret to pull private Docker images or an array of image pull secrets
+  ImagePullSecrets: null
+  # Configuration as Code (CasC) for Operations Center.
+  CasC:
+    # OperationsCenter.CasC.Enabled -- enable or disable CasC for Operations Center.
+    Enabled: false
+    # Alternative download URLs for CasC (optional).
+    # When using CasC to manage the instance, the download URLs for plugins and Update Center metadata can be
+    # overridden so a mirror server can be used. Please refer https://docs.cloudbees.com/docs/cloudbees-ci/latest/ for
+    # further information.
+    UCurl:
+      # OperationsCenter.CasC.UCurl.root -- Base url to mirror CloudBees Update Center. When managing CBCI with CasC
+      # Json metadata will be obtained from OperationsCenter.CasC.UCurl.root/envelope-ProductId/update-center.json?id=ProductId&version=CBCIVersion
+      # and plugins will be downloaded from OperationsCenter.CasC.UCurl.root/download/plugins/pluginId/pluginVersion/pluginId.hpi
+      root: null
+      # OperationsCenter.CasC.UCurl.json -- Base url to mirror only the Json metadata file from CloudBees Update
+      # Center. When managing CBCI with CasC Json metadata will be obtained from
+      # OperationsCenter.CasC.UCurl.json/envelope-ProductId/update-center.json?id=ProductId&version=CBCIVersion
+      json: null
+      # OperationsCenter.CasC.UCurl.plugins -- Base url to mirror only the plugins from CloudBees Update Center. When
+      # managing CBCI with CasC Json metadata will be obtained from
+      # OperationsCenter.CasC.UCurl.plugins/plugins/pluginId/pluginVersion/pluginId.hpi
+      plugins: null
+    # OperationsCenter.CasC.ConfigMapName -- the name of the ConfigMap used to configure Operations Center.
+    # Note: this property can point to a ConfigMap defined in OperationsCenter.ExtraConfigMaps,
+    # or any ConfigMap that exists in the cluster.
+    ConfigMapName: oc-casc-bundle
+    # casc-retriever (optional)
+    Retriever:
+      # OperationsCenter.Casc.Retriever.Enabled -- Whether to enable installation of the casc-retriever for the OC
+      Enabled: false
+      image:
+        # OperationsCenter.Casc.Retriever.image.registry -- Docker registry for Casc Retriever
+        registry: null
+        # OperationsCenter.CasC.Retriever.image.repository -- Docker image repository for Casc Retriever
+        repository: cloudbees-casc-scm-bundle-retriever
+        # OperationsCenter.CasC.Retriever.image.tag -- Docker image tag for Casc Retriever
+        tag: 710.447e10d08994
+        # OperationsCenter.CasC.Retriever.image.pullPolicy -- https://kubernetes.io/docs/concepts/containers/images/#updating-images
+        pullPolicy: IfNotPresent
+      Resources:
+        Limits:
+          # override with OperationsCenter.CasC.Retriever.Resources.Limits.Cpu -- CPU limit to run Casc Retriever
+          # https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-cpu
+          # Set to 0 to disable CPU limits (no limit will be applied)
+          Cpu: .25
+          # override with OperationsCenter.CasC.Retriever.Resources.Limits.Memory -- Memory limit to run CasC Retriever
+          # https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-memory
+          Memory: 512M
+          # override with OperationsCenter.CasC.Retriever.Resources.Limits.EphemeralStorage -- Ephemeral Storage limit to run CasC Retriever
+          # https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-memory
+          # EphemeralStorage: null
+        Requests:
+          # override with OperationsCenter.CasC.Retriever.Resources.Requests.Cpu -- CPU request to run CasC Retriever
+          # https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-cpu
+          Cpu: .25
+          # override with OperationsCenter.CasC.Retriever.Resources.Requests.Memory -- Memory request to run CasC Retriever
+          # https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-memory
+          Memory: 512M
+          # override with OperationsCenter.CasC.Retriever.Resources.Requests.EphemeralStorage -- Ephemeral Storage request to run CasC Retriever
+          # https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-memory
+          # EphemeralStorage: null
+      # ContainerPort -- Container port for http traffic for the CasC Retriever, the default value of 9090 should work for most deployments
+      containerPort: 9090
+      # OperationsCenter.CasC.Retriever.scmRepo -- The url of the repo containing the casc bundle
+      scmRepo: REPOSITORY
+      # OperationsCenter.CasC.Retriever..scmBranch -- The branch of the repo containing the casc bundle
+      scmBranch: BRANCH
+      # OperationsCenter.CasC.Retriever.scmBundlePath -- path to a folder within the repo where the bundle.yaml is located
+      scmBundlePath: "/"
+      # OperationsCenter.CasC.Retriever.ocBundleAutomaticVersion -- if true, the commit hash will replace the version of the bundle from the SCM
+      ocBundleAutomaticVersion: "false"
+      # OperationsCenter.CasC.Retriever.scmPollingInterval -- How frequently to poll SCM for changes
+      # Interval is specified using standard java Durataion format
+      # (see https://docs.oracle.com/javase/8/docs/api/java/time/Duration.html#parse-java.lang.CharSequence-)
+      scmPollingInterval: "PT20M"
+      # OperationsCenter.CasC.Retriever.githubWebhooksEnabled -- Indicates if Github webhook support is activated
+      githubWebhooksEnabled: "true"
+      # OperationsCenter.CasC.Retriever.emailBundleUpdateActive -- Enabled email notifications of new bundles
+      emailBundleUpdateActive: "false"
+      # OperationsCenter.CasC.Retriever.emailUpdateSubject -- If using email notifications, subject of the mail
+      emailUpdateSubject: null
+      # OperationsCenter.CasC.Retriever.emailBundleUpdateBody -- If using email notifications, body of the mail
+      emailBundleUpdateBody: null
+      # OperationsCenter.CasC.Retriever.emailBundleUpdateList -- If using email notifications, "to" list of mails of the mail
+      emailBundleUpdateList: null
+      # OperationsCenter.CasC.Retriever.smtpAuthMethods -- If using email notifications, smtp authentication methods, one or more from DIGEST-MD5 CRAM-SHA256 CRAM-SHA1 CRAM-MD5 PLAIN LOGIN
+      smtpAuthMethods: null
+      # OperationsCenter.CasC.Retriever.emailBundleUpdateFrom -- If using email notifications, mail sender
+      emailBundleUpdateFrom: null
+      # OperationsCenter.CasC.Retriever.smtpHost -- If using email notifications, hostname of the STMP server
+      smtpHost: null
+      # OperationsCenter.CasC.Retriever.smtpPort -- If using email notifications, port of the SMTP server
+      smtpPort: null
+      # OperationsCenter.CasC.Retriever.smtpStartTls -- If using email notifications, usage of Transport Layer Security, posible values are REQUIRED or OPTIONAL
+      smtpStartTls: null
+      # OperationsCenter.CasC.Retriever.secrets -- Allows you to customize the key used for each secret value
+      secrets:
+        # OperationsCenter.CasC.Retriever.secrets.secretName -- Define the name of the object that holds the secrets, defaults to casc-retriever-secrets if not specified
+        secretName: null
+        # OperationsCenter.CasC.Retriever.secrets.scmUsername -- SCM username to authenticate against the repo
+        scmUsername: null
+        # OperationsCenter.CasC.Retriever.secrets.scmPassword -- SCM password / token used in user authentication in the repo
+        scmPassword: null
+        # OperationsCenter.CasC.Retriever.secrets.sshConfig -- SCM SSH credentials, if using SSh credentials to connect to SCM you'll need to provide a a secret with .ssh contents, including config, private key and known_hosts that allow ssh authentication.
+        # Indicate the name of the secret to use.
+        # CasC SCM retriever only supports keys in OpenSSH format.
+        sshConfig: null
+        # OperationsCenter.CasC.Retriever.secrets.githubWebhookSecret -- If Github webhooks will be using a secret, set it up here. If not indicated all webhooks from configured repository + branch will be accepted
+        githubWebhookSecret: null
+        # OperationsCenter.CasC.Retriever.secrets.smtpUsername -- If using email notifications, username for the SMTP server authentication
+        smtpUsername: null
+        # OperationsCenter.CasC.Retriever.secrets.smtpPassword -- If using email notifications, password for the SMTP server authentication
+        smtpPassword: null
+        # OperationsCenter.CasC.Retriever.secrets.adminPassword -- Secret containing the hex encoded SHA-512 checksum password having a minimal length of 14 chars, for accessing retriever internal secured endpoints
+        adminPassword: null
+      # OperationsCenter.CasC.Retriever.containerSecurityContext -- Security context for the CasC Retriever container.
+      containerSecurityContext: {}
+      # OperationsCenter.CasC.Retriever.initContainerSecurityContext -- Security context for the CasC Retriever container.
+      initContainerSecurityContext: {}
+  # OperationsCenter.Platform -- Enables specific settings depending on the platform
+  # platform specific values are: `eks`, `aws`, `gke`, `aks`, `openshift4`
+  Platform: standard
+  # OperationsCenter.HostName -- The hostname used to access Operations Center through the ingress controller.
+  HostName: null
+  # OperationsCenter.ContextPath -- the path under which Operations Center will be accessible in the given host.
+  # DEPRECATED - Use OperationsCenter.Name instead.
+  ContextPath: null
+  License:
+    Evaluation:
+      # OperationsCenter.License.Evaluation.Enabled -- Obtain a trial evaluation license upon first startup of Operations Center.
+      # FirstName, LastName, Email, and Company are all mandatory.
+      # Operations Center must be able to contact licenses.cloudbees.com over HTTPS.
+      # By using this facility you accept the license agreement: https://www.cloudbees.com/r/subscription
+      Enabled: false
+      # OperationsCenter.License.Evaluation.FirstName -- first name of evaluating user
+      FirstName: null
+      # OperationsCenter.License.Evaluation.LastName -- last name of evaluating user
+      LastName: null
+      # OperationsCenter.License.Evaluation.Email -- email address of evaluating user
+      Email: null
+      # OperationsCenter.License.Evaluation.Company -- company or organization of evaluating user
+      Company: null
+  # OperationsCenter.Name -- the name in the URL under which Operations Center will be accessible in the given host.
+  # For instance, if Subdomain is true, the URL to access Operations Center will be {{OperationsCenter.Protocol}}://{{OperationsCenter.Name}}.{{OperationsCenter.HostName}}:{{OperationsCenter.Port}}
+  # If Subdomain is false, the URL to access Operations Center will be {{OperationsCenter.Protocol}}://{{OperationsCenter.HostName}}:{{OperationsCenter.Port}}/{{OperationsCenter.Name}}
+  Name: cjoc
+  # OperationsCenter.Protocol -- the protocol used to access CJOC. Possible values are http/https.
+  Protocol: http
+  # Protocol: https
+
+  # OperationsCenter.Port -- the port used to access CJOC. Defaults to 80/443 depending on Protocol. Can be overridden.
+  # Port: 80
+
+  # https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/#resource-requests-and-limits-of-pod-and-container
+  Resources:
+    Limits:
+      # OperationsCenter.Resources.Limits.Cpu -- CPU limit to run Operations Center
+      # https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-cpu
+      # Set to 0 to disable CPU limits (no limit will be applied)
+      Cpu: 1
+      # OperationsCenter.Resources.Limits.Memory -- Memory limit to run Operations Center
+      # https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-memory
+      Memory: 2G
+      # OperationsCenter.Resources.Limits.EphemeralStorage -- Ephemeral Storage limit to run Operations Center
+      # https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-memory
+      # EphemeralStorage: null
+    Requests:
+      # OperationsCenter.Resources.Requests.Cpu -- CPU request to run Operations Center
+      # https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-cpu
+      Cpu: 1
+      # OperationsCenter.Resources.Requests.Memory -- Memory request to run Operations Center
+      # https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-memory
+      Memory: 2G
+      # OperationsCenter.Resources.Requests.EphemeralStorage -- Ephemeral Storage request to run Operations Center
+      # https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-memory
+      # EphemeralStorage: null
+  # -- Environment variables that get added to the container (useful for e.g. http_proxy)
+  ContainerEnv: []
+  # ContainerEnv:
+  #   - name: http_proxy
+  #     value: "http://192.168.64.1:3128"
+  # -- ConfigMaps or Secrets that get added to the container as environment variables
+  ContainerEnvFrom: []
+  # ContainerEnvFrom:
+  # - configMapRef:
+  #     name: my-config-map
+
+  # OperationsCenter.JavaOpts -- Additional java options to pass to the Operations Center
+  JavaOpts: null
+  #   -Dcom.sun.management.jmxremote.port=4000
+  #   -Dcom.sun.management.jmxremote.authenticate=false
+  #   -Dcom.sun.management.jmxremote.ssl=false
+
+  # Container port where JMX is exposed
+  # JMXPort: 4000
+
+  # OperationsCenter.JenkinsOpts -- Additional arguments for jenkins.war
+  JenkinsOpts: null
+  # Security Context - ADVANCED MODE
+  # Now configurable on pod and container level using
+  # - PodSecurityContext
+  # - ContainerSecurityContext
+  # OperationsCenter.PodSecurityContext -- sets the shared fsGroup for all containers in the pod.
+  # https://kubernetes.io/docs/tasks/configure-pod-container/security-context/#discussion
+  PodSecurityContext: {}
+  # OperationsCenter.ContainerSecurityContext -- sets the shared fsGroup for all containers in the pod.
+  ContainerSecurityContext: {}
+  # PodSecurityContext:
+  #   fsGroup: 1000
+  # ContainerSecurityContext:
+  #   allowPrivilegeEscalation: false
+  #   capabilities:
+  #     drop:
+  #       - ALL
+  #   privileged: false
+  #   runAsGroup: 1000
+  #   runAsUser: 1000
+  #   runAsNonRoot: true
+  #   readOnlyRootFilesystem: true
+
+  # Security Context - SIMPLE MODE (DEPRECATED - this mode will eventually be removed in a later release)
+  # Run the Operations Center as a specific user (defaults to uid 1000)
+  # When setting RunAsUser to a different value than 0 also set FsGroup to the same value:
+  # https://kubernetes.io/docs/tasks/configure-pod-container/security-context/
+  # RunAsUser: 1000
+  # RunAsGroup: 1000
+  # Volumes that support ownership management are modified to be owned and writable by the GID specified in fsGroup
+  # Should be set to the same value as RunAsUser to ensure the volume is writable
+  # https://kubernetes.io/docs/tasks/configure-pod-container/security-context/#discussion
+  # FsGroup: 1000
+
+  # OperationsCenter.ServicePortName -- Controls the service port name
+  ServicePortName: http
+  # OperationsCenter.ServicePort -- Controls the service port where Operations Center http port is exposed. Don't change this parameter unless you know what you are doing
+  ServicePort: 80
+  # OperationsCenter.ServiceAgentListenerPort -- Controls the service port where Operations Center TCP port for agents is exposed. Don't change this parameter unless you know what you are doing
+  ServiceAgentListenerPort: 50000
+  # OperationsCenter.ServiceType -- Service Type. Defaults to ClusterIP, since we recommend using an ingress controller.
+  ServiceType: ClusterIP
+  # OperationsCenter.ServiceAnnotations -- Additional annotations to put on the Operations Center service
+  ServiceAnnotations: {}
+  #   service.beta.kubernetes.io/aws-load-balancer-backend-protocol: https
+
+  # OperationsCenter.ContainerPortName -- Controls the container port name
+  ContainerPortName: http
+  # OperationsCenter.ContainerPort -- Container port for http traffic
+  ContainerPort: 8080
+  # OperationsCenter.AgentListenerPort -- Container port for agent listener traffic
+  AgentListenerPort: 50000
+  # OperationsCenter.HealthProbes -- Enable Kubernetes Liveness and Readiness Probes
+  HealthProbes: true
+  # OperationsCenter.HealthProbeLivenessFailureThreshold -- Threshold for liveness failure
+  HealthProbeLivenessFailureThreshold: 12
+  # https://wiki.jenkins.io/display/JENKINS/CSRF+Protection
+  CSRF:
+    # OperationsCenter.CSRF.ProxyCompatibility -- Proxy compatibility for the default CSRF issuer
+    ProxyCompatibility: false
+  # OperationsCenter.LoadBalancerSourceRanges -- Only applicable when using `ServiceType: LoadBalancer`
+  LoadBalancerSourceRanges:
+    - 0.0.0.0/0
+  # OperationsCenter.LoadBalancerIP -- Optionally assign a known public LB IP
+  LoadBalancerIP: null
+  # LoadBalancerIP: 1.2.3.4
+
+  # OperationsCenter.NodeSelector -- Node labels and tolerations for pod assignment
+  # ref: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#nodeselector
+  NodeSelector: {}
+  # OperationsCenter.Tolerations -- Specify tolerations for the Operations Center pod.
+  # See [documentation](https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/)
+  Tolerations: []
+  # OperationsCenter.Annotations -- Additional annotations to put on the pod running Operations Center
+  Annotations: {}
+  Ingress:
+    # OperationsCenter.Ingress.Class -- Ingress class to use for OC and MM ingresses
+    # Should be set to the same value as controller.ingressClassResource.name in the ingress-nginx chart if in use
+    Class: nginx
+    # OperationsCenter.Ingress.Annotations -- annotations to put on Ingress object
+    Annotations:
+      kubernetes.io/tls-acme: "false"
+    tls:
+      # OperationsCenter.Ingress.tls.Enable -- Set this to true in order to enable TLS on the ingress record
+      Enable: false
+      # OperationsCenter.Ingress.tls.SecretName -- The name of the secret containing the certificate
+      # and private key to terminate TLS for the ingress
+      SecretName: null
+  Route:
+    tls:
+      # OperationsCenter.Route.tls.Enable -- Set this to true in OpenShift to terminate TLS at route level
+      # Read https://docs.openshift.com/container-platform/4.6/networking/routes/secured-routes.html for details.
+      # These also apply to Hibernation monitor and SSO relay if enabled.
+      Enable: false
+      # OperationsCenter.Route.tls.Termination -- Type of termination
+      Termination: edge
+      # OperationsCenter.Route.tls.InsecureEdgeTerminationPolicy -- Whether to redirect http to https
+      InsecureEdgeTerminationPolicy: Redirect
+      # OperationsCenter.Route.tls.CACertificate -- CA Certificate PEM-encoded
+      CACertificate: null
+      # OperationsCenter.Route.tls.Certificate -- Certificate PEM-encoded
+      Certificate: null
+      # OperationsCenter.Route.tls.Key -- Private key PEM-encoded
+      Key: null
+      # OperationsCenter.Route.tls.DestinationCACertificate -- When using `termination=reencrypt`, destination CA PEM-encoded
+      DestinationCACertificate: null
+  Gateway:
+    # OperationsCenter.Gateway.Name -- Name of the Gateway resource to attach HTTPRoutes to.
+    Name: null
+    # OperationsCenter.Gateway.Namespace -- Namespace where the Gateway resource exists.
+    # When set, NetworkPolicy will automatically be configured to allow traffic from this namespace,
+    # unless NetworkPolicy.ingressControllerSelector is manually configured (which takes precedence).
+    Namespace: null
+    # OperationsCenter.Gateway.SectionName -- Optional listener name on the Gateway resource.
+    # Maps to parentRefs[].sectionName in HTTPRoute resources.
+    SectionName: null
+  # OperationsCenter.ExtraConfigMaps -- Extra configmaps deployed with the chart
+  ExtraConfigMaps: []
+  # ExtraConfigMaps:
+  # - name: my-config-map
+  #   labels:
+  #     key1: value1
+  #   annotations:
+  #     key1: value1
+  #   data:
+  #      myfile.yaml: |
+  #        foo: bar
+
+  # OperationsCenter.ExtraContainers -- Extra containers to add to the pod containing Operations Center.
+  ExtraContainers: []
+  # ExtraContainers:
+  # - name: sleep
+  #   image: busybox
+  #   command: ["sleep", "infinity"]
+
+  # OperationsCenter.ExtraInitContainers -- Containers, which are run before the app containers are started.
+  ExtraInitContainers: []
+  # ExtraInitContainers:
+  # - name: init
+  #   image: busybox
+  #   command: ['sh', '-c', 'until nslookup myservice; do echo waiting for myservice; sleep 2; done;']
+
+  # OperationsCenter.ExtraGroovyConfiguration -- Provides additional init groovy scripts
+  # Each key becomes a file in /var/jenkins_config
+  ExtraGroovyConfiguration: {}
+  # ExtraGroovyConfiguration:
+  #   hello-world.groovy: |
+  #     System.out.println('Hello world!')
+
+  # OperationsCenter.TmpVolumeMedium -- Medium for the EmptyDir volume used for the TMP directory of the Operations Center
+  TmpVolumeMedium: ""
+  # OperationsCenter.ExtraVolumes -- Extra volumes to add to the pod
+  ExtraVolumes: []
+  # ExtraVolumes:
+  # - name: my-volume
+  #   configMap:
+  #     name: my-config-map
+
+  # OperationsCenter.ExtraVolumeMounts -- Extra volume mounts to add to the container containing Operations Center
+  ExtraVolumeMounts: []
+  # ExtraVolumeMounts:
+  # - name: my-volume
+  #   mountPath: /var/my-path
+  #   readOnly: true
+# Controller options
+Master:
+  # Master.Enabled -- Whether to create the resources required to schedule controllers.
+  Enabled: true
+  # Master.HighAvailabilitySupport -- Whether to set up required resources (RBAC, NetworkPolicy...) for high availability support. This option does NOT enable high availability on controllers, this needs to be done for each controller.
+  HighAvailabilitySupport: true
+  # Master.OperationsCenterNamespace -- When deploying Controller resources, this grants an Operations Center deployed in another namespace the right to deploy controllers
+  OperationsCenterNamespace: null
+  # Master.tokenReviewEnabled -- Whether to create the tokenreview ClusterRole and ClusterRoleBinding needed for controllers to validate M2M authentication tokens.
+  # When null (default), this is inferred as: CascBundleService.enabled or PluggableStorageService.enabled
+  # Set to true explicitly in a multi-namespace or multi-cluster setup where those services are enabled in the Operations Center namespace but not in the controller namespace.
+  tokenReviewEnabled: null
+  # container image inserted in Operations Center automatically
+  image:
+    # Master.image.registry -- Container image registry for the controller
+    registry: null
+    # Master.image.repository -- Container image repository for the controller
+    repository: 'cloudbees-core-mm'
+    # Master.image.tag -- Container image tag for the controller
+    tag: null
+    # Master.image.pullPolicy -- Used to override the default pull policy
+    pullPolicy: null
+  # Master.JavaOpts -- Additional Java options to pass to managed controllers. For example, setting up a JMX port
+  JavaOpts: null
+# Agent options
+Agents:
+  # Agents.Enabled -- Enable to create agent resources (service account, role)
+  Enabled: true
+  SeparateNamespace:
+    # Agents.SeparateNamespace.Enabled -- If enabled, agents resources will be created in a separate namespace as well as bindings allowing masters to schedule them.
+    Enabled: null
+    # Agents.SeparateNamespace.Name -- Namespace where to create agents resources. Defaults to `${namespace}-builds` where `${namespace}` is the namespace where the chart is installed.
+    Name: null
+    # Agents.SeparateNamespace.Create -- If true, the second namespace will be created when installing this chart. Otherwise, the existing namespace should be labeled with `cloudbees.com/role: agents` in order for network policies to work.
+    Create: false
+  image:
+    # Agents.image.registry -- Container image registry for the agent
+    registry: null
+    # Agents.image.repository -- Container image repository for the agent
+    repository: 'cloudbees-core-agent'
+    # Agents.image.tag -- Container image tag for the agent
+    tag: null
+  # Image pull secrets
+  # Enable this option when using a private registry.
+  # https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/#create-a-secret-by-providing-credentials-on-the-command-line
+  # Agents.ImagePullSecrets -- Name of image pull secret to pull private Docker images or an array of image pull secrets
+  ImagePullSecrets: null
+Persistence:
+  # Persistence.StorageClass -- Persistent Volume Storage Class for Jenkins Home
+  # If defined, storageClassName: <storageClass>.
+  # If set to "-", storageClassName: "", which disables dynamic provisioning.
+  # If undefined (the default) or set to null, the default storage class will be used,
+  # unless specified otherwise below.
+  # If setting OperationsCenter.Platform == gke, a storage class backed with
+  # SSD drives will be created by this chart and used automatically.
+  #
+  # StorageClass: "-"
+  StorageClass: null
+  # On AKS, use the following
+  # StorageClass: "managed-premium"
+
+  # Persistence.Annotations -- Annotations to put on the PVC
+  Annotations: {}
+  # Persistence.AccessMode -- Access mode for the PVC ([doc](https://kubernetes.io/docs/concepts/storage/persistent-volumes/#access-modes))
+  AccessMode: ReadWriteOnce
+  # Persistence.Size -- Size of the Operations Center volume
+  Size: 20Gi
+# Controller hibernation
+Hibernation:
+  # Hibernation.Enabled -- Whether to enable the [Hibernation](https://docs.cloudbees.com/docs/cloudbees-ci/latest/cloud-admin-guide/managing-masters#_hibernation_of_managed_masters) feature
+  Enabled: false
+  image:
+    # Hibernation.image.registry -- container registry for the image
+    registry: null
+    # Hibernation.image.tag -- container image tag
+    tag: '498.ccfd8b748a72'
+    # Hibernation.image.pullPolicy -- Used to override the default pull policy
+    pullPolicy: null
+    # Hibernation.image.repository -- container image repository
+    repository: managed-master-hibernation-monitor
+  # Hibernation.Protected -- Set to true to generate a secret URL component which must be used in all ingress endpoints
+  Protected: false
+  # Image pull secrets
+  # Enable this option when using a private registry.
+  # https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/#create-a-secret-by-providing-credentials-on-the-command-line
+  # Hibernation.ImagePullSecrets -- Name of image pull secret to pull private Docker images or an array of image pull secrets
+  ImagePullSecrets: null
+  # Hibernation.NodeSelector -- Node labels and tolerations for pod assignment
+  # ref: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#nodeselector
+  NodeSelector: {}
+  # Hibernation.Tolerations -- Specify tolerations for the Hibernation Monitor pod.
+  # See [documentation](https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/)
+
+  # https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/#resource-requests-and-limits-of-pod-and-container
+  Resources:
+    Limits:
+      # Hibernation.Resources.Limits.Cpu -- CPU limit to run Hibernation Monitor
+      # https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-cpu
+      # Set to 0 to disable CPU limits (no limit will be applied)
+      Cpu: 100m
+      # Hibernation.Resources.Limits.Memory -- Memory limit to run Hibernation Monitor
+      # https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-memory
+      Memory: 250Mi
+    Requests:
+      # Hibernation.Resources.Requests.Cpu -- CPU request to run Hibernation Monitor
+      # https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-cpu
+      Cpu: 100m
+      # Hibernation.Resources.Requests.Memory -- Memory request to run Hibernation Monitor
+      # https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-memory
+      Memory: 50Mi
+  # Hibernation.JavaOpts -- additional Java options to pass to the hibernation JVM process
+  JavaOpts: null
+  Tolerations: []
+  PodSecurityContext: {}
+  # fsGroup: 2000
+
+  SecurityContext:
+    capabilities:
+      drop:
+        - ALL
+    readOnlyRootFilesystem: true
+    runAsNonRoot: true
+    # runAsUser: 1000
+# Pluggable storage service
+PluggableStorageService:
+  # PluggableStorageService.enabled -- Whether to enable the [Pluggable Storage service](cloudbees.com/r/pluggable-storage-build-logs).
+  enabled: false
+  # PluggableStorageService.storageBackend -- Either `AMAZON_S3` for Amazon S3 and S3 API-compatible backends, `GOOGLE_CLOUD_STORAGE` for Google Cloud Storage, or `AZURE_BLOB_STORAGE` for Microsoft Azure Blob Storage
+  storageBackend: AMAZON_S3
+  # PluggableStorageService.storageBucket -- The name of the storage bucket or container to use for build logs
+  storageBucket: null
+  # PluggableStorageService.storageObjectNamePrefix -- An optional prefix to the object name used when storing build logs
+  storageObjectNamePrefix: ''
+  # PluggableStorageService.storagePresignedUrlExpiryMinutes -- Controls expiration for the presigned URLs sent to controllers for uploading/downloading files from the storage backend
+  storagePresignedUrlExpiryMinutes: 15
+  storageOptionsS3:
+    # PluggableStorageService.storageOptionsS3.region -- The name of the AWS region for the bucket.
+    region: us-east-1
+    # PluggableStorageService.storageOptionsS3.staticCredentialsSecret -- The name of a Kubernetes Secret containing the keys AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and optionally AWS_SESSION_TOKEN
+    staticCredentialsSecret: null
+    # PluggableStorageService.storageOptionsS3.endpointOverride -- The endpoint URI to access
+    endpointOverride: null
+    # PluggableStorageService.storageOptionsS3.pathStyleAccess -- Whether to use path-style access when accessing the storage endpoint rather than DNS-style access
+    pathStyleAccess: false
+    # PluggableStorageService.storageOptionsS3.ipv6Only -- Whether to use IPv6 when accessing the EC2 IMDS endpoint, will update the environment var AWS_EC2_METADATA_SERVICE_ENDPOINT_MODE to IPv6, see https://docs.aws.amazon.com/sdkref/latest/guide/feature-imds-credentials.html
+    ipv6Only: false
+  storageOptionsAzureBlobStorage:
+    # PluggableStorageService.storageOptionsAzureBlobStorage.endpoint -- The endpoint URI for Azure Blob Storage
+    endpoint: null
+  # PluggableStorageService.javaOpts -- Additional Java options to pass to the Pluggable storage service JVM process
+  javaOpts: ''
+  image:
+    # PluggableStorageService.image.registry -- container registry for the image
+    registry: null
+    # PluggableStorageService.image.repository -- container image repository
+    repository: pluggable-storage-service
+    # PluggableStorageService.image.tag -- container image tag
+    tag: '124.144ad4ea59a9'
+    # PluggableStorageService.image.pullPolicy -- Used to override the default pull policy
+    pullPolicy: IfNotPresent
+  # Image pull secrets
+  # Enable this option when using a private registry.
+  # https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/#create-a-secret-by-providing-credentials-on-the-command-line
+  # PluggableStorageService.imagePullSecrets -- Name of image pull secret to pull private Docker images or an array of image pull secrets
+  imagePullSecrets: null
+  # PluggableStorageService.nodeSelector -- Node labels and tolerations for pod assignment
+  # ref: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#nodeselector
+  nodeSelector: {}
+  # https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/#resource-requests-and-limits-of-pod-and-container
+  resources:
+    limits:
+      # PluggableStorageService.resources.limits.cpu -- CPU limit to run CloudBees build log service
+      # https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-cpu
+      # Set to 0 to disable CPU limits (no limit will be applied)
+      cpu: 500m
+      # PluggableStorageService.resources.limits.memory -- Memory limit to run CloudBees build log service
+      # https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-memory
+      memory: 500Mi
+    requests:
+      # PluggableStorageService.resources.requests.cpu -- CPU request to run CloudBees build log service
+      # https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-cpu
+      cpu: 500m
+      # PluggableStorageService.resources.requests.memory -- Memory request to run CloudBees build log service
+      # https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-memory
+      memory: 500Mi
+  # PluggableStorageService.replicas -- Number of replicas CloudBees build log service will start by default.
+  replicas: 2
+  # PluggableStorageService.tolerations -- Specify tolerations for the CloudBees build log service pod.
+  # See [documentation](https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/)
+  tolerations: []
+  # PluggableStorageService.annotations -- Additional annotations to put on the pod running the Pluggable Storage Service
+  annotations: {}
+  podSecurityContext: {}
+  # fsGroup: 2000
+
+  containerSecurityContext:
+    capabilities:
+      drop:
+        - ALL
+    readOnlyRootFilesystem: true
+    runAsNonRoot: true
+    # runAsUser: 1000
+NetworkPolicy:
+  # NetworkPolicy.Enabled -- Enable only if the cluster supports it. Read the [documentation](https://kubernetes.io/docs/concepts/services-networking/network-policies/) to understand what this is about.
+  Enabled: false
+  # NetworkPolicy.ingressControllerSelector -- Custom selector for the ingress-controller
+  ingressControllerSelector: []
+  # Example 1: There is an ingress-nginx instance in a different namespace, this is one option
+  #    - namespaceSelector:
+  #        matchLabels:
+  #          name: nginx-ingress
+  #      podSelector:
+  #        matchLabels:
+  #         app: nginx-ingress
+  #         component: controller
+  # Example 2: when using ALB, public traffic must be allowed. This is automatically set if OperationsCenter.Platform=eks
+  #    - ipBlock:
+  #        cidr: 0.0.0.0/0
+
+  # NetworkPolicy.JMXSelectors -- Custom selectors for accessing JMX port
+  JMXSelectors: []
+#    - namespaceSelector:
+#        matchLabels:
+#          name: datadog
+#      podSelector:
+#        matchLabels:
+#         app: datadog
+
+## Install Default RBAC roles and bindings
+rbac:
+  # rbac.install -- Install `role`/`rolebindings`/`serviceAccount`.
+  # If false (and rbac is enabled in the cluster anyway), provide valid names for all service accounts.
+  # DEPRECATED: This value should be always true
+  install: true
+  # rbac.installCluster -- Install `clusterrole`/`clusterrolebinding`
+  # These cluster roles are optional but prevent usage of some features, so we recommend setting them up.
+  # Defaults to true, except on Openshift where it defaults to false
+  # Please refer to templates/cjoc-clusterrole-master-management.yaml in the chart
+  #installCluster: true
+
+  # rbac.serviceAccountName -- Name of the service account Operations Center will run as
+  serviceAccountName: cjoc
+  # rbac.serviceAccountAnnaotations -- Optional service account annotations to enable things like [Workload Identity](https://cloud.google.com/kubernetes-engine/docs/how-to/workload-identity#authenticating_to) permissions.
+  serviceAccountAnnotations: {}
+  # rbac.masterServiceAccountName -- Name of the service account Jenkins masters will run as
+  # DEPRECATED: each controller uses its own service account now
+  masterServiceAccountName: jenkins
+  # rbac.serviceAccountAnnaotations -- Optional service account annotations to enable things like [Workload Identity](https://cloud.google.com/kubernetes-engine/docs/how-to/workload-identity#authenticating_to) permissions.
+  masterServiceAccountAnnotations: {}
+  # rbac.agentServiceAccountName -- Name of the service account Jenkins agents will run as
+  agentsServiceAccountName: jenkins-agents
+  # rbac.serviceAccountAnnaotations -- Optional service account annotations to enable things like [Workload Identity](https://cloud.google.com/kubernetes-engine/docs/how-to/workload-identity#authenticating_to) permissions.
+  agentsServiceAccountAnnotations: {}
+  # rbac.hibernationMonitorServiceAccountName -- Name of the service account the Hibernation monitor will run as (if enabled)
+  hibernationMonitorServiceAccountName: managed-master-hibernation-monitor
+  # rbac.pluggableStorageServiceServiceAccountName -- Name of the service account the Pluggable storage service will run as (if enabled)
+  pluggableStorageServiceServiceAccountName: pluggable-storage-service
+  # rbac.pluggableStorageServiceServiceAccountAnnotations -- Optional service account annotations to enable things like [Workload Identity](https://cloud.google.com/kubernetes-engine/docs/how-to/workload-identity#authenticating_to) permissions.
+  pluggableStorageServiceServiceAccountAnnotations: {}
+  # rbac.groupName -- Name of the group to bind to the role and cluster role for controller management. Used for e.g. [EKS access entries](https://docs.aws.amazon.com/eks/latest/userguide/access-entries.html)
+  groupName: ""
+# CASC Bundle Service (optional).
+# ToDo: Link with the proper documentation explaining the Bundle Service when available.
+CascBundleService:
+  # CascBundleService.enabled -- Whether to enable the installation of the CasC Bundle Service for the cluster
+  enabled: false
+  image:
+    # CascBundleService.image.registry -- Docker registry for CasC Bundle Service
+    registry: null
+    # CascBundleService.image.repository -- Docker image repository for CasC Bundle Service
+    repository: cloudbees-casc-bundle-service
+    # CascBundleService.image.tag -- Docker image tag for CasC Bundle Service
+    tag: 779.0c64d59bde91
+    # CascBundleService.image.dockerImage -- full Docker image path for CasC Bundle Service
+    dockerImage: null
+    # CascBundleService.image.pullPolicy -- https://kubernetes.io/docs/concepts/containers/images/#updating-images
+    pullPolicy: IfNotPresent
+  resources:
+    limits:
+      # CascBundleService.resources.limits.cpu -- CPU limit to run CasC Bundle Service
+      # https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-cpu
+      # Set to 0 to disable CPU limits (no limit will be applied)
+      cpu: 500m
+      # CascBundleService.resources.limits.memory -- Memory limit to run CasC Bundle Service
+      # https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-memory
+      memory: 512M
+    requests:
+      # CascBundleService.resources.requests.cpu -- CPU request to run CasC Bundle Service
+      # https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-cpu
+      cpu: 500m
+      # CascBundleService.resources.requests.memory -- Memory request to run CasC Bundle Service
+      # https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-memory
+      memory: 512M
+  # CascBundleService.serviceAccountName -- Name of the service account the CasC Bundle Service will run as
+  serviceAccountName: casc-bundle-service
+  # CascBundleService.replicas -- Number of replicas the CasC Bundle Service will start by default.
+  replicas: 2
+  ingress:
+    # CascBundleService.ingress.enabled -- whether or not we want to allow external access to the CasC Bundle Service.
+    enabled: true
+  ssh:
+    # CascBundleService.ssh.strictHostKeyCheckingEnabled -- whether or not we check the host public key when retrieving via SSH.
+    # SSH known hosts public keys can be configured in the CasC Bundle Service configuration secret as explained in the documentation.
+    # ref: https://docs.cloudbees.com/docs/cloudbees-ci/latest/casc-controller/set-up-managed-controller-with-service#_add_connectors_to_the_casc_controller_bundle_service
+    # DISABLING THIS OPTION IS A SECURITY RISK
+    strictHostKeyCheckingEnabled: true
+  # CascBundleService.autoversioning -- enable bundle autoversioning
+  autoversioning: true
+  # CascBundleService.pollingSchedule -- connectors polling schedule
+  pollingSchedule: 5m
+  podSecurityContext: {}
+  containerSecurityContext: {}
+  # CascBundleService.javaOpts -- Additional java options to pass to the CasC Bundle Service
+  javaOpts: null
+  # Image pull secrets
+  # Enable this option when using a private registry.
+  # https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/#create-a-secret-by-providing-credentials-on-the-command-line
+  # CascBundleService.imagePullSecrets -- Name of image pull secret to pull private Docker images or an array of image pull secrets
+  imagePullSecrets: null
+  # CascBundleService.nodeSelector -- Node labels and tolerations for pod assignment
+  # ref: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#nodeselector
+  nodeSelector: {}
+  # CascBundleService.tolerations -- Specify tolerations for the CasC Bundle Service pod.
+  # See [documentation](https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/)
+  tolerations: []
+  # CascBundleService.annotations -- Additional annotations to put on the pod running the CasC Bundle Service
+  annotations: {}
+  # CascBundleService.createConfig -- Whether the casc-bundle-service-config secret must be created by Helm or not.
+  # A common use case is to let the Secret be managed by an external secret tool.
+  # If this is set to false and the Secret is not created by other means, the service deployment will fail.
+  createConfig: true
+  # CascBundleService.credentialSecretsNamespace -- Namespace to manage the secrets to configure k8s based credentials.
+  credentialSecretsNamespace: null
+# Common parameters for all components. These can be overridden in each component.
+Common:
+  # -- Additional labels to add to all resources
+  labels: {}
+  image:
+    # Common.image.registry -- container registry for the images
+    registry: 'cloudbees'
+    # Common.image.tag -- container image tag
+    tag: '2.541.3.36065'
+    # Common.image.pullPolicy -- Used to override the default pull policy for all images
+    pullPolicy: null
