@@ -57,6 +57,17 @@ For a detailed look at the traffic flow and component relationships, see [DIAGRA
 
 If you encounter a 503 "no healthy upstream" error shortly after installation, it is likely due to the Load Balancer propagation delay. The `HealthCheckPolicy` ensures the backends become healthy once the configuration has fully synced to the GCP control plane.
 
+### Test with curl
+
+```bash
+curl -v -L -k  https://gateway.acaternberg.flow-training.beescloud.com/cjoc/whoAmI/api/json
+# Requires controller "ha" to be created before running these commands
+curl -v -L -k https://gateway.acaternberg.flow-training.beescloud.com/ha/whoAmI/api/json
+curl -c cokkie.txt  -v -L -k https://gateway.acaternberg.flow-training.beescloud.com/ha/whoAmI/api/json
+curl -b cokkie.txt  -v -L -k https://gateway.acaternberg.flow-training.beescloud.com/ha/whoAmI/api/json
+curl -c cokkie1.txt  -b cokkie.txt  -v -L -k https://gateway.acaternberg.flow-training.beescloud.com/ha/whoAmI/api/json
+```
+
 ## Reference Documentation
 
 | Topic | Documentation Link |
