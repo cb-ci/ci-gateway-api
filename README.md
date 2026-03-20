@@ -52,6 +52,7 @@ For a detailed look at the traffic flow and component relationships, see [DIAGRA
 ## Troubleshooting
 
 ### 503 Service Unavailable
+
 If you encounter a 503 "no healthy upstream" error shortly after installation, it is likely due to the Load Balancer propagation delay. The `HealthCheckPolicy` ensures the backends become healthy once the configuration has fully synced to the GCP control plane.
 
 ## Reference Documentation
@@ -59,7 +60,8 @@ If you encounter a 503 "no healthy upstream" error shortly after installation, i
 | Topic | Documentation Link |
 | :--- | :--- |
 | **GKE Gateway API Overview** | [Google Cloud Docs](https://cloud.google.com/kubernetes-engine/docs/concepts/gateway-api) |
-| **GKE Gateway Controller** | [Configuration Guide](https://cloud.google.com/kubernetes-engine/docs/how-to/gateway-api) |
+| **GKE Gateway Controller examples** | [Configuration Examples](https://oneuptime.com/blog/post/2026-02-09-gke-gateway-controller-http-routing/view) |
+| **GKE Gateway Controller examples1** | [Configuration Examples1](https://oneuptime.com/blog/post/2026-02-17-how-to-configure-gke-gateway-controller-for-advanced-http-routing-and-header-based-matching/view) |
 | **GCPBackendPolicy** | [Sticky Sessions & Timeouts](https://cloud.google.com/kubernetes-engine/docs/how-to/configure-gateway-resources#gcpbackendpolicy) |
 | **HealthCheckPolicy** | [Custom Health Checks](https://cloud.google.com/kubernetes-engine/docs/how-to/configure-gateway-resources#healthcheckpolicy) |
 | **Kubernetes Gateway API** | [Official SIG Docs](https://gateway-api.sigs.k8s.io/) |
