@@ -2,7 +2,7 @@
 set -eo pipefail
 
 # --- Configuration ---
-NAMESPACE=${NAMESPACE:-cloudbees-gatewayapi}
+NAMESPACE=${NAMESPACE:-cloudbees-envoy}
 GATEWAY_NAME=${GATEWAY_NAME:-cloudbees-gateway}
 CJOC_HOST_NAME=${CJOC_HOST_NAME:-gateway.acaternberg.flow-training.beescloud.com}
 SERVICE_NAME=${SERVICE_NAME:-ha}
@@ -12,6 +12,9 @@ REGION=${REGION:-us-east1}
 ZONE=${ZONE:-us-east1-d}
 CLUSTER_NAME=${CLUSTER_NAME:-cb-ci}
 CERT_NAME=acaternberg-cert-selfsigned
+
+ENVOY_GATEWAY_VERSION=${ENVOY_GATEWAY_VERSION:-v1.7.1}
+ENVOY_GW_NAMESPACE=envoy-gateway-system
 
 # --- Colors for Logging ---
 RED='\033[0;31m'
@@ -31,36 +34,25 @@ command -v helm    &>/dev/null || error "helm CLI not found."
 command -v kubectl &>/dev/null || error "kubectl CLI not found."
 
 # --- GKE Configuration ---
-log "Ensuring Gateway API is enabled on cluster ${CLUSTER_NAME}..."
+log "Verifying cluster ${CLUSTER_NAME} is reachable..."
 if ! gcloud container clusters describe "${CLUSTER_NAME}" --zone "${ZONE}" --format="value(status)" &>/dev/null; then
     error "Cluster ${CLUSTER_NAME} not found in zone ${ZONE}."
 fi
 
-# Check if Gateway API is already standard
-GW_API_STATUS=$(gcloud container clusters describe "${CLUSTER_NAME}" --zone "${ZONE}" --format="value(gatewayConfig.enabled)" 2>/dev/null || echo "false")
-if [[ "$GW_API_STATUS" != "true" ]]; then
-    log "Enabling Gateway API (standard)..."
-    gcloud container clusters update "${CLUSTER_NAME}" --gateway-api=standard --zone "${ZONE}"
-else
-    log "Gateway API already enabled."
-fi
+# --- Install Envoy Gateway ---
+log "Installing Envoy Gateway ${ENVOY_GATEWAY_VERSION} via Helm..."
+# helm repo add envoy-gateway https://charts.envoyproxy.io || true
+# helm repo update
 
-# --- Network Configuration ---
-log "Checking for proxy-only subnet in ${REGION}..."
-if ! gcloud compute networks subnets describe proxy-only-subnet --region="${REGION}" &>/dev/null; then
-    log "Creating proxy-only subnet..."
-    gcloud compute networks subnets create proxy-only-subnet \
-      --purpose=REGIONAL_MANAGED_PROXY \
-      --role=ACTIVE \
-      --region="${REGION}" \
-      --network=default \
-      --range=10.10.0.0/23
-else
-    log "Proxy-only subnet already exists."
-fi
+helm upgrade --install eg oci://docker.io/envoyproxy/gateway-helm --version "${ENVOY_GATEWAY_VERSION}" -n "${ENVOY_GW_NAMESPACE}" --create-namespace
 
-# --- Kubernetes Resources ---
-log "Configuring Kubernetes resources in namespace ${NAMESPACE}..."
+
+
+log "Waiting for Envoy Gateway controller to be ready..."
+kubectl rollout status deployment/envoy-gateway -n "${ENVOY_GW_NAMESPACE}" --timeout=120s
+
+# --- Kubernetes Namespace ---
+log "Configuring namespace ${NAMESPACE}..."
 kubectl create namespace "${NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f -
 
 # --- TLS Secret ---
@@ -71,17 +63,26 @@ kubectl create secret tls "${CERT_NAME}" \
   --key="./server.key" \
   -n "${NAMESPACE}"
 
-log "Applying GKE Gateway resources..."
+# --- Envoy Gateway Resources ---
+log "Applying GatewayClass..."
+cat <<EOF | kubectl apply -f -
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: eg
+spec:
+  controllerName: gateway.envoyproxy.io/gatewaycontroller
+EOF
+
+log "Applying Gateway..."
 cat <<EOF | kubectl apply -f -
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
   name: ${GATEWAY_NAME}
   namespace: ${NAMESPACE}
-  annotations:
-    cloud.google.com/neg: '{"ingress": true}'
-spec: 
-  gatewayClassName: gke-l7-regional-external-managed
+spec:
+  gatewayClassName: eg
   listeners:
   - name: https
     protocol: HTTPS
@@ -90,70 +91,108 @@ spec:
       mode: Terminate
       certificateRefs:
       - name: ${CERT_NAME}
+        namespace: ${NAMESPACE}
     allowedRoutes:
       namespaces:
         from: All
----
-apiVersion: networking.gke.io/v1
-kind: HealthCheckPolicy
+EOF
+
+log "Applying HTTPRoute..."
+cat <<EOF | kubectl apply -f -
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: cloudbees-route
+  namespace: ${NAMESPACE}
+spec:
+  parentRefs:
+  - name: ${GATEWAY_NAME}
+    namespace: ${NAMESPACE}
+    sectionName: https
+  hostnames:
+  - "${CJOC_HOST_NAME}"
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /cjoc
+    backendRefs:
+    - name: cjoc
+      port: 80
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /${CONTROLLER_NAME}
+    backendRefs:
+    - name: ${SERVICE_NAME}
+      port: 80
+EOF
+
+log "Applying BackendTrafficPolicy — active health checks for cjoc..."
+cat <<EOF | kubectl apply -f -
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: BackendTrafficPolicy
 metadata:
   name: cjoc-health-check-policy
   namespace: ${NAMESPACE}
 spec:
-  default:
-    checkIntervalSec: 10
-    timeoutSec: 5
-    healthyThreshold: 1
-    unhealthyThreshold: 3
-    config:
-      type: HTTP
-      httpHealthCheck:
-        requestPath: /cjoc/health/
-    logConfig:
-      enabled: true
-  targetRef:
-    group: ""
+  targetRefs:
+  - group: ""
     kind: Service
     name: cjoc
----
-apiVersion: networking.gke.io/v1
-kind: HealthCheckPolicy
-metadata:
-  name: ${CONTROLLER_NAME}-health-check-policy
-  namespace: ${NAMESPACE}
-spec:
-  default:
-    checkIntervalSec: 10
-    timeoutSec: 5
-    healthyThreshold: 1
-    unhealthyThreshold: 3
-    config:
+  healthCheck:
+    active:
       type: HTTP
-      httpHealthCheck:
-        requestPath: /${CONTROLLER_NAME}/health/
-    logConfig:
-      enabled: true
-  targetRef:
-    group: ""
-    kind: Service
-    name: ${SERVICE_NAME}
----
-apiVersion: networking.gke.io/v1
-kind: GCPBackendPolicy
+      http:
+        path: /cjoc/health/
+        method: GET
+        expectedStatuses:
+        - start: 200
+          end: 299
+      interval: 10s
+      timeout: 5s
+      unhealthyThreshold: 3
+      healthyThreshold: 1
+EOF
+
+log "Applying BackendTrafficPolicy — active health checks + sticky sessions for ${CONTROLLER_NAME}..."
+cat <<EOF | kubectl apply -f -
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: BackendTrafficPolicy
 metadata:
-  name: cloudbees-sticky-policy
+  name: ${CONTROLLER_NAME}-traffic-policy
   namespace: ${NAMESPACE}
 spec:
-  default:
-    sessionAffinity:
-      type: GENERATED_COOKIE
-      cookieTtlSec: 3600
-    connectionDraining:
-      drainingTimeoutSec: 60
-  targetRef:
-    group: ""
+  targetRefs:
+  - group: ""
     kind: Service
     name: ${SERVICE_NAME}
+  healthCheck:
+    active:
+      type: HTTP
+      http:
+        path: /${CONTROLLER_NAME}/health/
+        method: GET
+        expectedStatuses:
+        - start: 200
+          end: 299
+      interval: 10s
+      timeout: 5s
+      unhealthyThreshold: 3
+      healthyThreshold: 1
+  loadBalancer:
+    type: ConsistentHash
+    consistentHash:
+      type: Cookie
+      cookie:
+        name: CBCI_SESSION
+        ttl: 3600s
+        attributes:
+          SameSite: Strict
+  tcpKeepalive:
+    keepAliveProbes: 3
+    keepAliveTime: 60s
+    keepAliveInterval: 30s
 EOF
 
 # --- Helm Deployment ---
@@ -162,7 +201,7 @@ helm repo add cloudbees https://charts.cloudbees.com/public/cloudbees || true
 helm repo update
 
 log "Deploying CloudBees CI via Helm..."
-helm upgrade --install cloudbees-core-gwapi cloudbees/cloudbees-core \
+helm upgrade --install cloudbees-core-envoy cloudbees/cloudbees-core \
   --namespace "${NAMESPACE}" \
   --set Gateway.Enabled=true \
   --set OperationsCenter.Gateway.Name="${GATEWAY_NAME}" \
