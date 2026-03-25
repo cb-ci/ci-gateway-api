@@ -1,3 +1,4 @@
-server.key
-jenkins.pem
-server.crt
+**/server.key
+**/jenkins.pem
+**/server.crt
+**/ssl
