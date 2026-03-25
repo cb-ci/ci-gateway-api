@@ -2,3 +2,4 @@
 **/jenkins.pem
 **/server.crt
 **/ssl
+**/auth.sh
