@@ -4,7 +4,7 @@
 
 set -eo pipefail
 
-DOMAIN=${1:-gateway.acaternberg.flow-training.beescloud.com}
+DOMAIN=${1:-gateway-envoy.acaternberg.flow-training.beescloud.com}
 DAYS=${2:-365}
 
 echo "Generating self-signed certificate for domain: ${DOMAIN}"

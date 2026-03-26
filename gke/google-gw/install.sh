@@ -20,8 +20,8 @@ BLUE='\033[0;34m'
 NC='\033[0m'
 
 log()     { echo -e "${BLUE}[$(date +'%Y-%m-%dT%H:%M:%S')]${NC} $1"; }
-error()   { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
 success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
+warn()    { echo -e "${RED}[WARNING]${NC} $1"; }
 
 # --- Prerequisite Checks ---
 log "Checking prerequisites..."

@@ -4,7 +4,8 @@ set -eo pipefail
 # --- Configuration ---
 NAMESPACE=${NAMESPACE:-cloudbees-envoy}
 GATEWAY_NAME=${GATEWAY_NAME:-cloudbees-gateway}
-CJOC_HOST_NAME=${CJOC_HOST_NAME:-gateway.acaternberg.flow-training.beescloud.com}
+CJOC_HOST_NAME=${CJOC_HOST_NAME:-gateway-envoy.acaternberg.flow-training.beescloud.com}
+CLOUDBEES_STORAGE_CLASS=${CLOUDBEES_STORAGE_CLASS:-ssd-cloudbees-ci-cjoc1}
 SERVICE_NAME=${SERVICE_NAME:-ha}
 CONTROLLER_NAME=${CONTROLLER_NAME:-ha}
 
@@ -23,8 +24,8 @@ BLUE='\033[0;34m'
 NC='\033[0m'
 
 log()     { echo -e "${BLUE}[$(date +'%Y-%m-%dT%H:%M:%S')]${NC} $1"; }
-error()   { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
 success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
+warn()    { echo -e "${RED}[WARNING]${NC} $1"; }
 
 # --- Prerequisite Checks ---
 log "Checking prerequisites..."
@@ -41,12 +42,16 @@ fi
 
 # --- Install Envoy Gateway ---
 log "Installing Envoy Gateway ${ENVOY_GATEWAY_VERSION} via Helm..."
-# helm repo add envoy-gateway https://charts.envoyproxy.io || true
-# helm repo update
-
-helm upgrade --install eg oci://docker.io/envoyproxy/gateway-helm --version "${ENVOY_GATEWAY_VERSION}" -n "${ENVOY_GW_NAMESPACE}" --create-namespace
-
-
+# GKE forbids installing Gateway API CRDs beyond the standard channel.
+# We pull the chart locally and remove the bundled Gateway API CRDs to avoid admission webhook errors.
+if [ ! -d "gateway-helm" ]; then
+    rm -rf gateway-helm 2>/dev/null || true
+    helm pull oci://docker.io/envoyproxy/gateway-helm --version "${ENVOY_GATEWAY_VERSION}" --untar
+    rm -f gateway-helm/crds/gatewayapi-crds.yaml
+fi
+if [ ! $(helm list | grep -q "eg") ]; then
+  helm install eg ./gateway-helm -n "${ENVOY_GW_NAMESPACE}" --create-namespace
+fi 
 
 log "Waiting for Envoy Gateway controller to be ready..."
 kubectl rollout status deployment/envoy-gateway -n "${ENVOY_GW_NAMESPACE}" --timeout=120s
@@ -65,13 +70,14 @@ kubectl create secret tls "${CERT_NAME}" \
 
 # --- Envoy Gateway Resources ---
 log "Applying GatewayClass..."
+kubectl delete gatewayclass eg --ignore-not-found
 cat <<EOF | kubectl apply -f -
 apiVersion: gateway.networking.k8s.io/v1
 kind: GatewayClass
 metadata:
   name: eg
 spec:
-  controllerName: gateway.envoyproxy.io/gatewaycontroller
+  controllerName: gateway.envoyproxy.io/gatewayclass-controller
 EOF
 
 log "Applying Gateway..."
@@ -97,12 +103,12 @@ spec:
         from: All
 EOF
 
-log "Applying HTTPRoute..."
+log "Applying HTTPRoutes (cjoc and ha)..."
 cat <<EOF | kubectl apply -f -
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
-  name: cloudbees-route
+  name: cjoc-route
   namespace: ${NAMESPACE}
 spec:
   parentRefs:
@@ -119,6 +125,20 @@ spec:
     backendRefs:
     - name: cjoc
       port: 80
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: ha-route
+  namespace: ${NAMESPACE}
+spec:
+  parentRefs:
+  - name: ${GATEWAY_NAME}
+    namespace: ${NAMESPACE}
+    sectionName: https
+  hostnames:
+  - "${CJOC_HOST_NAME}"
+  rules:
   - matches:
     - path:
         type: PathPrefix
@@ -137,9 +157,9 @@ metadata:
   namespace: ${NAMESPACE}
 spec:
   targetRefs:
-  - group: ""
-    kind: Service
-    name: cjoc
+  - group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: cjoc-route
   healthCheck:
     active:
       type: HTTP
@@ -147,8 +167,7 @@ spec:
         path: /cjoc/health/
         method: GET
         expectedStatuses:
-        - start: 200
-          end: 299
+        - 200
       interval: 10s
       timeout: 5s
       unhealthyThreshold: 3
@@ -164,9 +183,9 @@ metadata:
   namespace: ${NAMESPACE}
 spec:
   targetRefs:
-  - group: ""
-    kind: Service
-    name: ${SERVICE_NAME}
+  - group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: ha-route
   healthCheck:
     active:
       type: HTTP
@@ -174,8 +193,7 @@ spec:
         path: /${CONTROLLER_NAME}/health/
         method: GET
         expectedStatuses:
-        - start: 200
-          end: 299
+        - 200
       interval: 10s
       timeout: 5s
       unhealthyThreshold: 3
@@ -189,10 +207,6 @@ spec:
         ttl: 3600s
         attributes:
           SameSite: Strict
-  tcpKeepalive:
-    keepAliveProbes: 3
-    keepAliveTime: 60s
-    keepAliveInterval: 30s
 EOF
 
 # --- Helm Deployment ---
@@ -210,6 +224,7 @@ helm upgrade --install cloudbees-core-envoy cloudbees/cloudbees-core \
   --set OperationsCenter.HostName="${CJOC_HOST_NAME}" \
   --set OperationsCenter.Protocol=https \
   --set Agents.SeparateNamespace.Enabled=false \
+  --set Persistence.StorageClass="${CLOUDBEES_STORAGE_CLASS}" \
   --set Common.image.tag='latest'
 
 # --- Wait for Gateway External IP ---
