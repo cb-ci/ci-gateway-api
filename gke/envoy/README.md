@@ -55,9 +55,9 @@ kubectl exec -ti cjoc-0 -n cloudbees-envoy -- cat /var/jenkins_home/secrets/init
 
 Visit: `https://gateway-envoy.acaternberg.flow-training.beescloud.com/cjoc`
 
-For a detailed look at the traffic flow and component relationships, see [DIAGRAM.md](./DIAGRAM.md).
-
 ## Architecture
+
+For a detailed look at the traffic flow and component relationships, see [DIAGRAM.md](./DIAGRAM.md).
 
 ### Key Resources
 
