@@ -27,12 +27,13 @@ Key capabilities:
 
 ```bash
 chmod +x generate-ssl-cert.sh
-./generate-ssl-cert.sh gateway.acaternberg.flow-training.beescloud.com
+./generate-ssl-cert.sh gateway-envoy.acaternberg.flow-training.beescloud.com
 ```
 
 ### 2. Installation
 
 Run the installation script. It will:
+
 1. Install **Envoy Gateway** into the `envoy-gateway-system` namespace via Helm.
 2. Create the `cloudbees-envoy` namespace and TLS secret.
 3. Apply the `GatewayClass`, `Gateway`, `HTTPRoute`, and `BackendTrafficPolicy` resources.
@@ -52,7 +53,7 @@ Once the deployment is complete, retrieve the initial admin password:
 kubectl exec -ti cjoc-0 -n cloudbees-envoy -- cat /var/jenkins_home/secrets/initialAdminPassword
 ```
 
-Visit: `https://gateway.acaternberg.flow-training.beescloud.com/cjoc`
+Visit: `https://gateway-envoy.acaternberg.flow-training.beescloud.com/cjoc`
 
 For a detailed look at the traffic flow and component relationships, see [DIAGRAM.md](./DIAGRAM.md).
 
@@ -102,14 +103,14 @@ kubectl describe backendtrafficpolicy -n cloudbees-envoy
 ### Test with curl
 
 ```bash
-curl -v -L -k https://gateway.acaternberg.flow-training.beescloud.com/cjoc/whoAmI/api/json
+curl -v -L -k https://gateway-envoy.acaternberg.flow-training.beescloud.com/cjoc/whoAmI/api/json
 
 # Requires controller "ha" to be created first
-curl -v -L -k https://gateway.acaternberg.flow-training.beescloud.com/ha/whoAmI/api/json
+curl -v -L -k https://gateway-envoy.acaternberg.flow-training.beescloud.com/ha/whoAmI/api/json
 
 # Sticky session test
-curl -c cookie.txt -v -L -k https://gateway.acaternberg.flow-training.beescloud.com/ha/whoAmI/api/json
-curl -b cookie.txt -v -L -k https://gateway.acaternberg.flow-training.beescloud.com/ha/whoAmI/api/json
+curl -c cookie.txt -v -L -k https://gateway-envoy.acaternberg.flow-training.beescloud.com/ha/whoAmI/api/json
+curl -b cookie.txt -v -L -k https://gateway-envoy.acaternberg.flow-training.beescloud.com/ha/whoAmI/api/json
 ```
 
 ## Reference Documentation
