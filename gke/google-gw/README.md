@@ -41,9 +41,9 @@ kubectl exec -ti cjoc-0 -n cloudbees-gatewayapi -- cat /var/jenkins_home/secrets
 
 Visit the URL configured in `install.sh` (default: `https://gateway.acaternberg.flow-training.beescloud.com/cjoc`).
 
-For a detailed look at the traffic flow and component relationships, see [DIAGRAM.md](./DIAGRAM.md).
-
 ## Architecture
+
+For a detailed look at the traffic flow and component relationships, see [DIAGRAM.md](./DIAGRAM.md).
 
 ### Key Components
 

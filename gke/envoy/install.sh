@@ -49,10 +49,9 @@ if [ ! -d "gateway-helm" ]; then
     helm pull oci://docker.io/envoyproxy/gateway-helm --version "${ENVOY_GATEWAY_VERSION}" --untar
     rm -f gateway-helm/crds/gatewayapi-crds.yaml
 fi
-if [ ! $(helm list | grep -q "eg") ]; then
-  helm install eg ./gateway-helm -n "${ENVOY_GW_NAMESPACE}" --create-namespace
-fi 
 
+log "Applying Envoy Gateway Helm chart..."
+helm upgrade --install eg ./gateway-helm -n "${ENVOY_GW_NAMESPACE}" --create-namespace
 log "Waiting for Envoy Gateway controller to be ready..."
 kubectl rollout status deployment/envoy-gateway -n "${ENVOY_GW_NAMESPACE}" --timeout=120s
 
@@ -118,6 +117,14 @@ spec:
   hostnames:
   - "${CJOC_HOST_NAME}"
   rules:
+  - filters:
+    - type: RequestHeaderModifier
+      requestHeaderModifier:
+        set:
+          - name: "X-Forwarded-Port"
+            value: "443"
+          - name: "X-Forwarded-Proto"
+            value: "https"
   - matches:
     - path:
         type: PathPrefix
@@ -139,6 +146,14 @@ spec:
   hostnames:
   - "${CJOC_HOST_NAME}"
   rules:
+  - filters:
+    - type: RequestHeaderModifier
+      requestHeaderModifier:
+        set:
+          - name: "X-Forwarded-Port"
+            value: "443"
+          - name: "X-Forwarded-Proto"
+            value: "https"
   - matches:
     - path:
         type: PathPrefix
