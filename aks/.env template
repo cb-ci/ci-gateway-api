@@ -1,0 +1,12 @@
+
+#export RANDOM_ID="$(openssl rand -hex 3)"
+export RANDOM_ID="1"
+export MY_RESOURCE_PREFIX="YOUR_NAME" 
+export MY_RESOURCE_GROUP_NAME="${MY_RESOURCE_PREFIX}-AKSResourceGroup$RANDOM_ID"
+#export REGION="westeurope"
+export REGION="eastus"
+export MY_AKS_CLUSTER_NAME="${MY_RESOURCE_PREFIX}-$RANDOM_ID"
+export MY_DNS_LABEL="${MY_RESOURCE_PREFIX}-dnslabel$RANDOM_ID"
+export KUBECONFIG="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/az-kubeconfig"
+
+az version

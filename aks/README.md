@@ -10,15 +10,15 @@ aks/
 │   ├── README.md
 │   ├── DIAGRAM.md
 │   ├── install.sh
-│   ├── uninstall.sh
-│   └── generate-ssl-cert.sh
+│   └── uninstall.sh
 │
 └── azure-appgw/        # Azure-native Application Gateway Ingress Controller
     ├── README.md
     ├── DIAGRAM.md
-    ├── install.sh
-    └── generate-ssl-cert.sh
+    └── install.sh
 ```
+
+**Note:** SSL certificate generation script has been centralized to `../scripts/generate-ssl-cert.sh`
 
 ## Choosing an Approach
 
@@ -59,16 +59,20 @@ aks/
 ### Envoy Gateway (Cloud-Agnostic)
 
 ```bash
+# Generate SSL certificates
+CJOC_HOST=gateway-envoy.acaternberg.flow-training.beescloud.com ../scripts/generate-ssl-cert.sh
+# Install
 cd envoy
-./generate-ssl-cert.sh gateway-envoy.acaternberg.flow-training.beescloud.com
 ./install.sh
 ```
 
 ### Azure Application Gateway (Azure-Native)
 
 ```bash
+# Generate SSL certificates
+CJOC_HOST=gateway-appgw.acaternberg.flow-training.beescloud.com ../scripts/generate-ssl-cert.sh
+# Install
 cd azure-appgw
-./generate-ssl-cert.sh gateway-appgw.acaternberg.flow-training.beescloud.com
 ./install.sh
 ```
 
@@ -94,7 +98,7 @@ cd azure-appgw
 - `kubectl` CLI tool
 - `helm` CLI tool
 - An AKS cluster (version 1.24+)
-- Valid TLS certificates (or use the provided `generate-ssl-cert.sh` script)
+- Valid TLS certificates (or use the provided `../scripts/generate-ssl-cert.sh` script)
 
 ### Envoy Gateway Specific
 - No additional Azure resources required

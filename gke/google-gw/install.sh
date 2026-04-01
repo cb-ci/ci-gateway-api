@@ -1,35 +1,27 @@
 #!/bin/bash
 set -eo pipefail
 
-# --- Configuration ---
-NAMESPACE=${NAMESPACE:-cloudbees-gatewayapi}
-GATEWAY_NAME=${GATEWAY_NAME:-cloudbees-gateway}
-CJOC_HOST_NAME=${CJOC_HOST_NAME:-gateway.acaternberg.flow-training.beescloud.com}
-SERVICE_NAME=${SERVICE_NAME:-ha}
-CONTROLLER_NAME=${CONTROLLER_NAME:-ha}
+# ---------------------------------------------------------------------------
+# Resolve script directory (safe for both direct execution and sourcing)
+# ---------------------------------------------------------------------------
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-REGION=${REGION:-us-east1}
-ZONE=${ZONE:-us-east1-d}
-CLUSTER_NAME=${CLUSTER_NAME:-cb-ci}
-CERT_NAME=acaternberg-cert-selfsigned
+# ---------------------------------------------------------------------------
+# Load environment variables
+# ---------------------------------------------------------------------------
+ENV_FILE="${SCRIPT_DIR}/../.env"
+if [[ -f "${ENV_FILE}" ]]; then
+  # shellcheck source=/dev/null
+  source "${ENV_FILE}"
+else
+  echo "[ERROR] No .env file found at ${ENV_FILE}." >&2
+  echo "        Please create one based on .env.template." >&2
+  return 1 2>/dev/null || exit 1
+fi
 
-# --- Colors for Logging ---
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-BLUE='\033[0;34m'
-NC='\033[0m'
-
-log()     { echo -e "${BLUE}[$(date +'%Y-%m-%dT%H:%M:%S')]${NC} $1"; }
-success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
-warn()    { echo -e "${RED}[WARNING]${NC} $1"; }
-
-# --- Prerequisite Checks ---
-log "Checking prerequisites..."
-[[ -f "./jenkins.pem" ]] || error "jenkins.pem not found in current directory."
-[[ -f "./server.key" ]]  || error "server.key not found in current directory."
-command -v helm    &>/dev/null || error "helm CLI not found."
-command -v kubectl &>/dev/null || error "kubectl CLI not found."
-
+NAMESPACE=${NAMESPACE:-cloudbees-google-gw}
+CJOC_HOST_NAME=${CJOC_HOST_NAME:-gateway-google-gw.$DOMAIN}
+ 
 # --- GKE Configuration ---
 log "Ensuring Gateway API is enabled on cluster ${CLUSTER_NAME}..."
 if ! gcloud container clusters describe "${CLUSTER_NAME}" --zone "${ZONE}" --format="value(status)" &>/dev/null; then
@@ -56,7 +48,7 @@ if ! gcloud compute networks subnets describe proxy-only-subnet --region="${REGI
       --network=default \
       --range=10.10.0.0/23
 else
-    log "Proxy-only subnet already exists."
+    warn "Proxy-only subnet already exists."
 fi
 
 # --- Kubernetes Resources ---
@@ -67,8 +59,8 @@ kubectl create namespace "${NAMESPACE}" --dry-run=client -o yaml | kubectl apply
 log "Updating TLS secret ${CERT_NAME}..."
 kubectl delete secret "${CERT_NAME}" -n "${NAMESPACE}" --ignore-not-found
 kubectl create secret tls "${CERT_NAME}" \
-  --cert="./jenkins.pem" \
-  --key="./server.key" \
+  --cert="${CERT_DIR}/jenkins.pem" \
+  --key="${CERT_DIR}/server.key" \
   -n "${NAMESPACE}"
 
 log "Applying GKE Gateway resources..."
@@ -136,7 +128,7 @@ spec:
   targetRef:
     group: ""
     kind: Service
-    name: ${SERVICE_NAME}
+    name: ${CONTROLLER_NAME}
 ---
 apiVersion: networking.gke.io/v1
 kind: GCPBackendPolicy
@@ -153,7 +145,7 @@ spec:
   targetRef:
     group: ""
     kind: Service
-    name: ${SERVICE_NAME}
+    name: ${CONTROLLER_NAME}
 EOF
 
 # --- Helm Deployment ---
@@ -171,6 +163,7 @@ helm upgrade --install cloudbees-core-gwapi cloudbees/cloudbees-core \
   --set OperationsCenter.HostName="${CJOC_HOST_NAME}" \
   --set OperationsCenter.Protocol=https \
   --set Agents.SeparateNamespace.Enabled=false \
+  --set Persistence.StorageClass="${CLOUDBEES_STORAGE_CLASS}" \
   --set Common.image.tag='latest'
 
 # --- Wait for Gateway External IP ---
