@@ -20,7 +20,7 @@ Key capabilities:
 - An AKS cluster with AGIC enabled or add-on installed (version 1.24+ recommended).
 - An Azure Application Gateway provisioned (or let AGIC create one).
 - `az`, `kubectl`, and `helm` CLI tools configured and authenticated.
-- Self-signed or CA-signed certificates (`jenkins.pem` and `server.key`) placed in this directory. See `./generate-ssl-cert.sh` to generate self-signed certificates.
+- Self-signed or CA-signed certificates (`jenkins.pem` and `server.key`). See `../scripts/generate-ssl-cert.sh` to generate self-signed certificates.
 - Azure permissions to manage Application Gateway resources.
 
 ## Getting Started
@@ -28,16 +28,7 @@ Key capabilities:
 ### 1. Generate Certificates (if needed)
 
 ```bash
-chmod +x generate-ssl-cert.sh
-./generate-ssl-cert.sh gateway-appgw.acaternberg.flow-training.beescloud.com
-```
-
-Alternatively, you can use the centralized SSL generation script:
-
-```bash
-cd ../../scripts
-CJOC_HOST=gateway-appgw.acaternberg.flow-training.beescloud.com ./generate-ssl-cert.sh
-cp ssl/server.key ssl/server.crt ../aks/azure-appgw/
+CJOC_HOST=gateway-appgw.acaternberg.flow-training.beescloud.com ../scripts/generate-ssl-cert.sh
 ```
 
 ### 2. Installation

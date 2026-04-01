@@ -26,6 +26,7 @@ Key capabilities:
 ### 1. Generate Certificates (if needed)
 
 ```bash
+cd ../scripts/
 chmod +x generate-ssl-cert.sh
 ./generate-ssl-cert.sh gateway-envoy.acaternberg.flow-training.beescloud.com
 ```

@@ -19,15 +19,14 @@ Key capabilities:
 
 - An AKS cluster (version 1.24+ recommended).
 - `az`, `kubectl`, and `helm` CLI tools configured and authenticated.
-- Self-signed or CA-signed certificates (`jenkins.pem` and `server.key`) placed in this directory. See `./generate-ssl-cert.sh` to generate self-signed certificates.
+- Self-signed or CA-signed certificates (`jenkins.pem` and `server.key`). See `../scripts/generate-ssl-cert.sh` to generate self-signed certificates.
 
 ## Getting Started
 
 ### 1. Generate Certificates (if needed)
 
 ```bash
-chmod +x generate-ssl-cert.sh
-./generate-ssl-cert.sh gateway-envoy.acaternberg.flow-training.beescloud.com
+CJOC_HOST=gateway-envoy.acaternberg.flow-training.beescloud.com ../scripts/generate-ssl-cert.sh
 ```
 
 ### 2. Installation
