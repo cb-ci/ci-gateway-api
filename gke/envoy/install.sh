@@ -1,36 +1,36 @@
 #!/bin/bash
 set -eo pipefail
 
+
+
+# ---------------------------------------------------------------------------
+# Resolve script directory (safe for both direct execution and sourcing)
+# ---------------------------------------------------------------------------
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# ---------------------------------------------------------------------------
+# Load environment variables
+# ---------------------------------------------------------------------------
+ENV_FILE="${SCRIPT_DIR}/../.env"
+if [[ -f "${ENV_FILE}" ]]; then
+  # shellcheck source=/dev/null
+  source "${ENV_FILE}"
+else
+  echo "[ERROR] No .env file found at ${ENV_FILE}." >&2
+  echo "        Please create one based on .env.template." >&2
+  return 1 2>/dev/null || exit 1
+fi
+
 # --- Configuration ---
 NAMESPACE=${NAMESPACE:-cloudbees-envoy}
-GATEWAY_NAME=${GATEWAY_NAME:-cloudbees-gateway}
-CJOC_HOST_NAME=${CJOC_HOST_NAME:-gateway-envoy.acaternberg.flow-training.beescloud.com}
-CLOUDBEES_STORAGE_CLASS=${CLOUDBEES_STORAGE_CLASS:-ssd-cloudbees-ci-cjoc1}
-SERVICE_NAME=${SERVICE_NAME:-ha}
-CONTROLLER_NAME=${CONTROLLER_NAME:-ha}
-
-REGION=${REGION:-us-east1}
-ZONE=${ZONE:-us-east1-d}
-CLUSTER_NAME=${CLUSTER_NAME:-cb-ci}
-CERT_NAME=acaternberg-cert-selfsigned
-
+CJOC_HOST_NAME=${CJOC_HOST_NAME:-gateway-envoy.$DOMAIN}
 ENVOY_GATEWAY_VERSION=${ENVOY_GATEWAY_VERSION:-v1.7.1}
 ENVOY_GW_NAMESPACE=envoy-gateway-system
 
-# --- Colors for Logging ---
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-BLUE='\033[0;34m'
-NC='\033[0m'
-
-log()     { echo -e "${BLUE}[$(date +'%Y-%m-%dT%H:%M:%S')]${NC} $1"; }
-success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
-warn()    { echo -e "${RED}[WARNING]${NC} $1"; }
-
 # --- Prerequisite Checks ---
 log "Checking prerequisites..."
-[[ -f "./jenkins.pem" ]] || error "jenkins.pem not found in current directory."
-[[ -f "./server.key" ]]  || error "server.key not found in current directory."
+[[ -f "${CERT_DIR}/jenkins.pem" ]] || error "jenkins.pem not found in ${CERT_DIR}."
+[[ -f "${CERT_DIR}/server.key" ]]  || error "server.key not found in ${CERT_DIR}."
 command -v helm    &>/dev/null || error "helm CLI not found."
 command -v kubectl &>/dev/null || error "kubectl CLI not found."
 
@@ -63,8 +63,8 @@ kubectl create namespace "${NAMESPACE}" --dry-run=client -o yaml | kubectl apply
 log "Updating TLS secret ${CERT_NAME}..."
 kubectl delete secret "${CERT_NAME}" -n "${NAMESPACE}" --ignore-not-found
 kubectl create secret tls "${CERT_NAME}" \
-  --cert="./jenkins.pem" \
-  --key="./server.key" \
+  --cert="${CERT_DIR}/jenkins.pem" \
+  --key="${CERT_DIR}/server.key" \
   -n "${NAMESPACE}"
 
 # --- Envoy Gateway Resources ---
