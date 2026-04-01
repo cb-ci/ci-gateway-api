@@ -159,7 +159,7 @@ spec:
         type: PathPrefix
         value: /${CONTROLLER_NAME}
     backendRefs:
-    - name: ${SERVICE_NAME}
+    - name: ${CONTROLLER_NAME}
       port: 80
 EOF
 
