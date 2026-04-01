@@ -4,3 +4,5 @@
 **/ssl
 **/auth.sh
 gateway-helm
+**/.env
+**/kubeconfig

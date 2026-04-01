@@ -16,11 +16,6 @@ CERT_NAME=acaternberg-cert-selfsigned
 ENVOY_GATEWAY_VERSION=${ENVOY_GATEWAY_VERSION:-v1.7.1}
 ENVOY_GW_NAMESPACE=envoy-gateway-system
 
-# --- Colors for Logging ---
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-BLUE='\033[0;34m'
-NC='\033[0m'
 
 log()     { echo -e "${BLUE}[$(date +'%Y-%m-%dT%H:%M:%S')]${NC} $1"; }
 success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
