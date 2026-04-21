@@ -11,14 +11,12 @@ gke/
 │   ├── DIAGRAM.md
 │   ├── install.sh
 │   ├── uninstall.sh
-│   └── generate-ssl-cert.sh
+│   
 │
 ├── google-gw/          # GCP-native Gateway API implementation
 │   ├── README.md
 │   ├── DIAGRAM.md
-│   ├── install.sh
-│   └── generate-ssl-cert.sh
-│
+│   ├── install.sh│   
 └── auth.sh             # GCP authentication helper script
 ```
 
@@ -27,6 +25,7 @@ gke/
 ### Option 1: Envoy Gateway (`./envoy`)
 
 **Best for:**
+
 - Multi-cloud or hybrid deployments
 - Portable configurations across different Kubernetes distributions
 - Using standard Gateway API resources (Gateway, HTTPRoute, BackendTrafficPolicy)
@@ -34,6 +33,7 @@ gke/
 - Avoiding GCP-specific dependencies
 
 **Key features:**
+
 - Cloud-agnostic implementation
 - Standard Gateway API resources
 - No GCP-specific dependencies
@@ -45,6 +45,7 @@ gke/
 ### Option 2: GCP Gateway API (`./google-gw`)
 
 **Best for:**
+
 - GCP-native deployments
 - Leveraging GCP's regional external Application Load Balancer
 - Integration with GCP networking features (Cloud Armor, IAP, etc.)
@@ -52,6 +53,7 @@ gke/
 - Production deployments requiring Google's managed load balancer
 
 **Key features:**
+
 - Native GCP integration
 - Regional External Application Load Balancer (managed service)
 - GCP HealthCheckPolicy (networking.gke.io)
@@ -120,24 +122,28 @@ Run the installation script for your chosen method:
 ## 🛠 Prerequisites
 
 ### Common Requirements
+
 * `gcloud` CLI installed and authenticated
-* `kubectl` CLI tool (with `gke-gcloud-auth-plugin` installed)
-* `helm` CLI tool
-* A GKE cluster (version 1.24+)
-* Valid TLS certificates (or use the provided `../scripts/generate-ssl-cert.sh` script)
+- `kubectl` CLI tool (with `gke-gcloud-auth-plugin` installed)
+- `helm` CLI tool
+- A GKE cluster (version 1.24+)
+- Valid TLS certificates (or use the provided `../scripts/generate-ssl-cert.sh` script)
 
 ### Envoy Gateway Specific
+
 * No additional GCP resources required
-* Works with any GKE cluster
+- Works with any GKE cluster
 
 ### GCP Gateway API Specific
+
 * Gateway API enabled on GKE cluster: `--gateway-api=standard`
-* Proxy-only subnet in the region (automatically created by `install.sh`)
-* GKE Gateway Controller enabled (automatic with Gateway API)
+- Proxy-only subnet in the region (automatically created by `install.sh`)
+- GKE Gateway Controller enabled (automatic with Gateway API)
 
 ## Architecture
 
 Both implementations provide:
+
 - **TLS termination** at the ingress layer
 - **Path-based routing** for Operations Center (`/cjoc`) and Managed Controllers (e.g., `/ha`)
 - **Custom health checks** for CloudBees CI's health endpoints (`/cjoc/health/`, `/ha/health/`)
@@ -151,11 +157,13 @@ See individual DIAGRAM.md files for detailed architecture diagrams.
 ### 1. Load Balancer Architecture
 
 **Envoy Gateway:**
+
 - Runs as pods within your GKE cluster
 - Exposes via a standard Kubernetes LoadBalancer Service
 - Traffic flow: External LB → Envoy Pods → Application Pods
 
 **GCP Gateway API:**
+
 - Uses Google's Regional External Application Load Balancer (managed service)
 - Leverages Network Endpoint Groups (NEGs) for direct pod routing
 - Traffic flow: Regional ALB → NEGs → Application Pods (direct)
@@ -163,6 +171,7 @@ See individual DIAGRAM.md files for detailed architecture diagrams.
 ### 2. Health Check Configuration
 
 **Envoy Gateway:**
+
 ```yaml
 apiVersion: gateway.envoyproxy.io/v1alpha1
 kind: BackendTrafficPolicy
@@ -175,6 +184,7 @@ spec:
 ```
 
 **GCP Gateway API:**
+
 ```yaml
 apiVersion: networking.gke.io/v1
 kind: HealthCheckPolicy
@@ -189,6 +199,7 @@ spec:
 ### 3. Session Affinity
 
 **Envoy Gateway:**
+
 ```yaml
 loadBalancer:
   type: ConsistentHash
@@ -199,6 +210,7 @@ loadBalancer:
 ```
 
 **GCP Gateway API:**
+
 ```yaml
 apiVersion: networking.gke.io/v1
 kind: GCPBackendPolicy
@@ -213,21 +225,21 @@ spec:
 
 ### Common Issues
 
-* **No external IP assigned:**
-  * Envoy: Check `kubectl get svc -n envoy-gateway-system`
-  * GCP Gateway: Check `kubectl describe gateway -n <namespace>` and GCP Console → Load Balancing
-* **503/502 errors:**
-  * Check pod readiness: `kubectl get pods -n <namespace>`
-  * Envoy: Check `kubectl describe backendtrafficpolicy -n <namespace>`
-  * GCP Gateway: Check backend health in GCP Console → Load Balancing → Backend Services
-* **GCP Gateway: Proxy-only subnet errors:**
-  * Verify subnet exists: `gcloud compute networks subnets list --filter="purpose=REGIONAL_MANAGED_PROXY"`
-  * Check subnet is in the correct region
-  * Ensure subnet doesn't overlap with existing ranges
-* **Certificate issues:**
-  * Ensure certificates are valid and properly formatted
-  * Check secret exists: `kubectl get secret <cert-name> -n <namespace>`
-  * Verify certificate chain is complete
+- **No external IP assigned:**
+  - Envoy: Check `kubectl get svc -n envoy-gateway-system`
+  - GCP Gateway: Check `kubectl describe gateway -n <namespace>` and GCP Console → Load Balancing
+- **503/502 errors:**
+  - Check pod readiness: `kubectl get pods -n <namespace>`
+  - Envoy: Check `kubectl describe backendtrafficpolicy -n <namespace>`
+  - GCP Gateway: Check backend health in GCP Console → Load Balancing → Backend Services
+- **GCP Gateway: Proxy-only subnet errors:**
+  - Verify subnet exists: `gcloud compute networks subnets list --filter="purpose=REGIONAL_MANAGED_PROXY"`
+  - Check subnet is in the correct region
+  - Ensure subnet doesn't overlap with existing ranges
+- **Certificate issues:**
+  - Ensure certificates are valid and properly formatted
+  - Check secret exists: `kubectl get secret <cert-name> -n <namespace>`
+  - Verify certificate chain is complete
 
 ### Stuck "Terminating" Resources
 
@@ -282,11 +294,13 @@ This script verifies connection persistence to controller replicas through the l
 ## Cost Considerations
 
 ### Envoy Gateway
+
 - **VM costs**: LoadBalancer Service provisions GCP Network Load Balancer
 - **Compute costs**: Envoy proxy pods consume cluster CPU/memory
 - **Simpler pricing**: Standard compute + load balancer forwarding rules
 
 ### GCP Gateway API
+
 - **Application Load Balancer**: Charged per hour + per GB processed
 - **Forwarding rules**: Regional external forwarding rule costs
 - **Health checks**: Included in ALB pricing
@@ -303,6 +317,7 @@ The `auth.sh` script provides a quick way to authenticate with GCP and configure
 ```
 
 This script handles:
+
 - GCP authentication
 - Project selection
 - Kubectl context configuration
