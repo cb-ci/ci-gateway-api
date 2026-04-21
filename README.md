@@ -8,15 +8,14 @@ The goal of this project is to demonstrate how to replace traditional Ingress-ba
 
 1. **GKE Native (`gke/google-gw`)**: Leveraging Google Cloud's managed Gateway controller and Regional External Application Load Balancers.
 2. **AKS Native (`aks/azure-appgw`)**: Leveraging Azure Cloud's managed Gateway controller and Regional External Application Load Balancers.
-3. **Envoy Gateway**
-    * (`gke/envoy`)*: Utilizing the cloud-agnostic Envoy Gateway controller for a uniform experience across different Kubernetes environments.
-    * (`aks/envoy`)*: Utilizing the cloud-agnostic Envoy Gateway controller for a uniform experience across different Kubernetes environments.
+3. **Envoy Gateway (`gke/envoy`, `aks/envoy`)**: Utilizing the cloud-agnostic Envoy Gateway controller for a uniform experience across different Kubernetes environments.
 
 ## 📂 Project Structure
 
 * **[gke/google-gw](./gke/google-gw)**: GKE-specific implementation using native GCP policies (`HealthCheckPolicy`, `GCPBackendPolicy`).
 * **[gke/envoy](./gke/envoy)**: Cloud-agnostic implementation using Envoy-specific extension APIs (`BackendTrafficPolicy`) for health checks and session affinity.
-* **[aks](./aks)**: AKS-native Gateway API implementation.
+* **[aks/azure-appgw](./aks/azure-appgw)**: AKS-native Gateway API implementation.
+* **[aks/envoy](./aks/envoy)**: Cloud-agnostic implementation using Envoy-specific extension APIs (`BackendTrafficPolicy`) for health checks and session affinity.
 * **[scripts](./scripts)**: Common utility scripts, including SSL certificate generation.
 
 ## ⚙️ Configuration
