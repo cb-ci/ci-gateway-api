@@ -1,4 +1,4 @@
-# CloudBees CI on GKE with Gateway API
+# CloudBees CI with Gateway API
 
 This repository provides a comprehensive guide and ready-to-use scripts for deploying CloudBees CI on Google Kubernetes Engine (GKE) using the modern [Kubernetes Gateway API](https://gateway-api.sigs.k8s.io/).
 
@@ -7,7 +7,8 @@ This repository provides a comprehensive guide and ready-to-use scripts for depl
 The goal of this project is to demonstrate how to replace traditional Ingress-based networking with the more expressive and role-oriented Gateway API. We provide two distinct architectural paths to help you choose the best fit for your infrastructure needs:
 
 1. **GKE Native (`gke/google-gw`)**: Leveraging Google Cloud's managed Gateway controller and Regional External Application Load Balancers.
-2. **Envoy Gateway (`gke/envoy`)**: Utilizing the cloud-agnostic Envoy Gateway controller for a uniform experience across different Kubernetes environments.
+2. **AKS Native (`aks/`)**: Leveraging Azure Cloud's managed Gateway controller and Regional External Application Load Balancers.
+3. **Envoy Gateway (`gke/envoy`)**: Utilizing the cloud-agnostic Envoy Gateway controller for a uniform experience across different Kubernetes environments.
 
 ## Project Structure
 
