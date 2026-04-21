@@ -11,7 +11,7 @@ KEY_FILE="server.key"
 STORE_PW="changeit"
 
 # Ensure variables are set or have defaults for the -subj flag
-CJOC_HOST=${CJOC_HOST:-"gateway.acaternberg.flow-training.beescloud.com"}
+CJOC_HOST=${1:-"gateway.acaternberg.flow-training.beescloud.com"}
 
 
 
@@ -32,7 +32,7 @@ openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
     -keyout "${KEY_FILE}" \
     -out "${CERT_FILE}" \
     -subj "/C=US/ST=State/L=City/O=Organization/OU=DevOps/CN=${CJOC_HOST}" \
-    -addext "subjectAltName=DNS.1:${CJOC_HOST},DNS.2:${CJOC_HOST},DNS.3:${CJOC_HOST}"
+    -addext "subjectAltName=DNS.1:${CJOC_HOST}"
 
 chmod 600 "${KEY_FILE}"
 chmod 644 "${CERT_FILE}"

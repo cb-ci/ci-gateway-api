@@ -23,7 +23,14 @@ Key capabilities:
 
 ## Getting Started
 
-### 1. Generate Certificates (if needed)
+### 1. Configure Environment
+
+```bash
+cp .env-template .env
+# Edit .env and fill in your GCP PROJECT_ID and other variables
+```
+
+### 2. Generate Certificates (if needed)
 
 ```bash
 cd ../scripts/

@@ -11,7 +11,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # ---------------------------------------------------------------------------
 # Load environment variables
 # ---------------------------------------------------------------------------
-ENV_FILE="${SCRIPT_DIR}/../.env"
+ENV_FILE=".env"
 if [[ -f "${ENV_FILE}" ]]; then
   # shellcheck source=/dev/null
   source "${ENV_FILE}"
@@ -22,10 +22,11 @@ else
 fi
 
 # --- Configuration ---
-NAMESPACE=${NAMESPACE:-cloudbees-envoy}
-CJOC_HOST_NAME=${CJOC_HOST_NAME:-gateway-envoy.$DOMAIN}
-ENVOY_GATEWAY_VERSION=${ENVOY_GATEWAY_VERSION:-v1.7.1}
+
+ENVOY_GATEWAY_VERSION=${ENVOY_GATEWAY_VERSION:-latest} # v1.7.1
 ENVOY_GW_NAMESPACE=envoy-gateway-system
+CERT_DIR="ssl"
+echo $CJOC_HOST_NAME
 
 # --- Prerequisite Checks ---
 log "Checking prerequisites..."
@@ -51,7 +52,7 @@ if [ ! -d "gateway-helm" ]; then
 fi
 
 log "Applying Envoy Gateway Helm chart..."
-helm upgrade --install eg ./gateway-helm -n "${ENVOY_GW_NAMESPACE}" --create-namespace
+#helm upgrade --install eg ./gateway-helm -n "${ENVOY_GW_NAMESPACE}" --create-namespace
 log "Waiting for Envoy Gateway controller to be ready..."
 kubectl rollout status deployment/envoy-gateway -n "${ENVOY_GW_NAMESPACE}" --timeout=120s
 
@@ -61,6 +62,7 @@ kubectl create namespace "${NAMESPACE}" --dry-run=client -o yaml | kubectl apply
 
 # --- TLS Secret ---
 log "Updating TLS secret ${CERT_NAME}..."
+../../scripts/generate-ssl-cert.sh ${CJOC_HOST_NAME}
 kubectl delete secret "${CERT_NAME}" -n "${NAMESPACE}" --ignore-not-found
 kubectl create secret tls "${CERT_NAME}" \
   --cert="${CERT_DIR}/jenkins.pem" \
@@ -69,7 +71,7 @@ kubectl create secret tls "${CERT_NAME}" \
 
 # --- Envoy Gateway Resources ---
 log "Applying GatewayClass..."
-kubectl delete gatewayclass eg --ignore-not-found
+#kubectl delete gatewayclass eg --ignore-not-found
 cat <<EOF | kubectl apply -f -
 apiVersion: gateway.networking.k8s.io/v1
 kind: GatewayClass
@@ -233,6 +235,7 @@ log "Deploying CloudBees CI via Helm..."
 helm upgrade --install cloudbees-core-envoy cloudbees/cloudbees-core \
   --namespace "${NAMESPACE}" \
   --set Gateway.Enabled=true \
+  --set Gateway.Name="${GATEWAY_NAME}" \
   --set OperationsCenter.Gateway.Name="${GATEWAY_NAME}" \
   --set OperationsCenter.Gateway.SectionName=https \
   --set OperationsCenter.Gateway.Namespace="${NAMESPACE}" \

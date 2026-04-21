@@ -22,7 +22,14 @@ Traditional GKE Ingress is being succeeded by the Gateway API, which provides a 
 
 ## Getting Started
 
-### 1. Installation
+### 1. Configure Environment
+
+```bash
+cp .env-template .env
+# Edit .env and fill in your GCP PROJECT_ID and other variables
+```
+
+### 2. Installation
 
 Run the provided installation script. It will enable the necessary GCP services, create the proxy-only subnet (if missing), and deploy the Gateway resources and CloudBees CI.
 
