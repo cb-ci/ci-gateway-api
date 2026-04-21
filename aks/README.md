@@ -58,6 +58,14 @@ aks/
 
 ### Envoy Gateway (Cloud-Agnostic)
 
+1. **Configure Environment**:
+   ```bash
+   cp .env-template .env
+   # Edit .env and fill in your Azure details
+   ```
+
+2. **Generate SSL certificates**:
+
 ```bash
 # Generate SSL certificates
 CJOC_HOST=gateway-envoy.acaternberg.flow-training.beescloud.com ../scripts/generate-ssl-cert.sh
