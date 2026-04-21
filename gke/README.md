@@ -63,19 +63,39 @@ gke/
 
 ## Quick Start
 
-### Envoy Gateway (Cloud-Agnostic)
+### 1. Authenticate to the Cluster
+
+The `auth.sh` helper script ensures you are authenticated with GCP and have the correct `kubectl` context:
 
 ```bash
-cd envoy
-./generate-ssl-cert.sh gateway-envoy.acaternberg.flow-training.beescloud.com
-./install.sh
+chmod +x auth.sh
+./auth.sh
 ```
 
-### GCP Gateway API (GCP-Native)
+### 2. Configure Your Environment
+
+Choose your implementation (`envoy` or `google-gw`) and set up your environment variables:
 
 ```bash
-cd google-gw
-./generate-ssl-cert.sh gateway.acaternberg.flow-training.beescloud.com
+cd envoy/  # or cd google-gw/
+cp .env-template .env
+# Edit .env and replace placeholders with your actual values (PROJECT_ID, DOMAIN, etc.)
+```
+
+### 3. Generate SSL Certificates
+
+Use the centralized script to generate self-signed certificates for your specified host:
+
+```bash
+# From the gke/ directory
+../scripts/generate-ssl-cert.sh gateway-envoy.acaternberg.flow-training.beescloud.com
+```
+
+### 4. Install CloudBees CI
+
+Run the installation script for your chosen method:
+
+```bash
 ./install.sh
 ```
 
@@ -97,23 +117,23 @@ cd google-gw
 | **Setup Complexity** | Low | Medium (requires proxy-only subnet) |
 | **Network Endpoint Groups** | No | Yes (direct pod routing) |
 
-## Prerequisites
+## 🛠 Prerequisites
 
 ### Common Requirements
-- `gcloud` CLI installed and authenticated
-- `kubectl` CLI tool
-- `helm` CLI tool
-- A GKE cluster (version 1.24+)
-- Valid TLS certificates (or use the provided `generate-ssl-cert.sh` script)
+* `gcloud` CLI installed and authenticated
+* `kubectl` CLI tool (with `gke-gcloud-auth-plugin` installed)
+* `helm` CLI tool
+* A GKE cluster (version 1.24+)
+* Valid TLS certificates (or use the provided `../scripts/generate-ssl-cert.sh` script)
 
 ### Envoy Gateway Specific
-- No additional GCP resources required
-- Works with any GKE cluster
+* No additional GCP resources required
+* Works with any GKE cluster
 
 ### GCP Gateway API Specific
-- Gateway API enabled on GKE cluster: `--gateway-api=standard`
-- Proxy-only subnet in the region (automatically created by install script)
-- GKE Gateway Controller enabled (automatic with Gateway API)
+* Gateway API enabled on GKE cluster: `--gateway-api=standard`
+* Proxy-only subnet in the region (automatically created by `install.sh`)
+* GKE Gateway Controller enabled (automatic with Gateway API)
 
 ## Architecture
 
@@ -193,24 +213,33 @@ spec:
 
 ### Common Issues
 
-**No external IP assigned:**
-- Envoy: Check `kubectl get svc -n envoy-gateway-system`
-- GCP Gateway: Check `kubectl describe gateway -n <namespace>` and GCP Console → Load Balancing
+* **No external IP assigned:**
+  * Envoy: Check `kubectl get svc -n envoy-gateway-system`
+  * GCP Gateway: Check `kubectl describe gateway -n <namespace>` and GCP Console → Load Balancing
+* **503/502 errors:**
+  * Check pod readiness: `kubectl get pods -n <namespace>`
+  * Envoy: Check `kubectl describe backendtrafficpolicy -n <namespace>`
+  * GCP Gateway: Check backend health in GCP Console → Load Balancing → Backend Services
+* **GCP Gateway: Proxy-only subnet errors:**
+  * Verify subnet exists: `gcloud compute networks subnets list --filter="purpose=REGIONAL_MANAGED_PROXY"`
+  * Check subnet is in the correct region
+  * Ensure subnet doesn't overlap with existing ranges
+* **Certificate issues:**
+  * Ensure certificates are valid and properly formatted
+  * Check secret exists: `kubectl get secret <cert-name> -n <namespace>`
+  * Verify certificate chain is complete
 
-**503/502 errors:**
-- Check pod readiness: `kubectl get pods -n <namespace>`
-- Envoy: Check `kubectl describe backendtrafficpolicy -n <namespace>`
-- GCP Gateway: Check backend health in GCP Console → Load Balancing → Backend Services
+### Stuck "Terminating" Resources
 
-**GCP Gateway: Proxy-only subnet errors:**
-- Verify subnet exists: `gcloud compute networks subnets list --filter="purpose=REGIONAL_MANAGED_PROXY"`
-- Check subnet is in the correct region
-- Ensure subnet doesn't overlap with existing ranges
+On GKE, if you delete a Gateway or Gateway API CRDs while they are still in use (or if the managed controller is delayed), they can get stuck in a "Terminating" state. This is often due to stuck finalizers. To resolve this:
 
-**Certificate issues:**
-- Ensure certificates are valid and properly formatted
-- Check secret exists: `kubectl get secret <cert-name> -n <namespace>`
-- Verify certificate chain is complete
+```bash
+# Patch the resource to remove finalizers
+kubectl patch gateway <name> -n <namespace> -p '{"metadata":{"finalizers":null}}' --type=merge
+
+# If the CRD itself is stuck
+kubectl patch crd gateways.gateway.networking.k8s.io -p '{"metadata":{"finalizers":null}}' --type=merge
+```
 
 ### Testing Sticky Sessions
 
