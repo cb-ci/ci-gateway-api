@@ -157,6 +157,7 @@ log "Deploying CloudBees CI via Helm..."
 helm upgrade --install cloudbees-core-gwapi cloudbees/cloudbees-core \
   --namespace "${NAMESPACE}" \
   --set Gateway.Enabled=true \
+  --set Gateway.Name="${GATEWAY_NAME}" \
   --set OperationsCenter.Gateway.Name="${GATEWAY_NAME}" \
   --set OperationsCenter.Gateway.SectionName=https \
   --set OperationsCenter.Gateway.Namespace="${NAMESPACE}" \
