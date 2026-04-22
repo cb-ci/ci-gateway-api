@@ -1,39 +1,35 @@
-#!/bin/bash
+#!/usr/bin/env bash
+# -----------------------------------------------------------------------------
+# install.sh — Install Envoy Gateway and CloudBees CI on GKE.
+# -----------------------------------------------------------------------------
 set -eo pipefail
 
+set -euo pipefail
 
-
-# ---------------------------------------------------------------------------
-# Resolve script directory (safe for both direct execution and sourcing)
-# ---------------------------------------------------------------------------
+# Resolve script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
-# ---------------------------------------------------------------------------
+# Source common functions
+# shellcheck source=/dev/null
+source "${ROOT_DIR}/scripts/_functions.sh"
+
 # Load environment variables
-# ---------------------------------------------------------------------------
-ENV_FILE=".env"
-if [[ -f "${ENV_FILE}" ]]; then
-  # shellcheck source=/dev/null
-  source "${ENV_FILE}"
-else
-  echo "[ERROR] No .env file found at ${ENV_FILE}." >&2
-  echo "        Please create one based on .env.template." >&2
-  return 1 2>/dev/null || exit 1
-fi
+load_env "${ROOT_DIR}/.env"
 
 # --- Configuration ---
-
-ENVOY_GATEWAY_VERSION=${ENVOY_GATEWAY_VERSION:-latest} # v1.7.1
+ENVOY_GATEWAY_VERSION=${ENVOY_GATEWAY_VERSION:-latest}
 ENVOY_GW_NAMESPACE=envoy-gateway-system
-CERT_DIR="ssl"
-echo $CJOC_HOST_NAME
+CERT_DIR="${ROOT_DIR}/ssl"
 
 # --- Prerequisite Checks ---
 log "Checking prerequisites..."
-[[ -f "${CERT_DIR}/jenkins.pem" ]] || error "jenkins.pem not found in ${CERT_DIR}."
-[[ -f "${CERT_DIR}/server.key" ]]  || error "server.key not found in ${CERT_DIR}."
-command -v helm    &>/dev/null || error "helm CLI not found."
-command -v kubectl &>/dev/null || error "kubectl CLI not found."
+check_command helm
+check_command kubectl
+check_command gcloud
+
+[[ -f "${CERT_DIR}/jenkins.pem" ]] || warn "jenkins.pem not found in ${CERT_DIR}. Running cert generation..."
+[[ -f "${CERT_DIR}/server.key" ]]  || warn "server.key not found in ${CERT_DIR}. Running cert generation..."
 
 # --- GKE Configuration ---
 log "Verifying cluster ${CLUSTER_NAME} is reachable..."
@@ -45,16 +41,17 @@ fi
 log "Installing Envoy Gateway ${ENVOY_GATEWAY_VERSION} via Helm..."
 # GKE forbids installing Gateway API CRDs beyond the standard channel.
 # We pull the chart locally and remove the bundled Gateway API CRDs to avoid admission webhook errors.
-if [ ! -d "gateway-helm" ]; then
-    rm -rf gateway-helm 2>/dev/null || true
-    helm pull oci://docker.io/envoyproxy/gateway-helm --version "${ENVOY_GATEWAY_VERSION}" --untar
-    rm -f gateway-helm/crds/gatewayapi-crds.yaml
+if [ ! -d "${SCRIPT_DIR}/gateway-helm" ]; then
+    rm -rf "${SCRIPT_DIR}/gateway-helm" 2>/dev/null || true
+    helm pull oci://docker.io/envoyproxy/gateway-helm --version "${ENVOY_GATEWAY_VERSION}" --untar --destination "${SCRIPT_DIR}"
+    rm -f "${SCRIPT_DIR}/gateway-helm/crds/gatewayapi-crds.yaml"
 fi
 
 log "Applying Envoy Gateway Helm chart..."
-#helm upgrade --install eg ./gateway-helm -n "${ENVOY_GW_NAMESPACE}" --create-namespace
+#helm upgrade --install eg "${SCRIPT_DIR}/gateway-helm" -n "${ENVOY_GW_NAMESPACE}" --create-namespace
+
 log "Waiting for Envoy Gateway controller to be ready..."
-kubectl rollout status deployment/envoy-gateway -n "${ENVOY_GW_NAMESPACE}" --timeout=120s
+#kubectl rollout status deployment/envoy-gateway -n "${ENVOY_GW_NAMESPACE}" --timeout=120s
 
 # --- Kubernetes Namespace ---
 log "Configuring namespace ${NAMESPACE}..."
@@ -62,7 +59,8 @@ kubectl create namespace "${NAMESPACE}" --dry-run=client -o yaml | kubectl apply
 
 # --- TLS Secret ---
 log "Updating TLS secret ${CERT_NAME}..."
-../../scripts/generate-ssl-cert.sh ${CJOC_HOST_NAME}
+"${ROOT_DIR}/scripts/generate-ssl-cert.sh" "${CJOC_HOST_NAME}"
+
 kubectl delete secret "${CERT_NAME}" -n "${NAMESPACE}" --ignore-not-found
 kubectl create secret tls "${CERT_NAME}" \
   --cert="${CERT_DIR}/jenkins.pem" \

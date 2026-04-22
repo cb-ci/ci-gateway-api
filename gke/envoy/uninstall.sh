@@ -1,20 +1,24 @@
-#!/bin/bash
+#!/usr/bin/env bash
+# -----------------------------------------------------------------------------
+# uninstall.sh — Uninstall Envoy Gateway and CloudBees CI from GKE.
+# -----------------------------------------------------------------------------
 set -eo pipefail
+
+# Resolve script directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+
+# Source common functions
+# shellcheck source=/dev/null
+source "${ROOT_DIR}/scripts/_functions.sh"
+
+# Load environment variables
+load_env "${SCRIPT_DIR}/.env"
 
 # --- Configuration ---
 NAMESPACE=${NAMESPACE:-cloudbees-envoy}
 ENVOY_GW_NAMESPACE=envoy-gateway-system
 GATEWAY_CLASS_NAME=eg
-
-# --- Colors for Logging ---
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-BLUE='\033[0;34m'
-NC='\033[0m'
-
-log()     { echo -e "${BLUE}[$(date +'%Y-%m-%dT%H:%M:%S')]${NC} $1"; }
-success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
-warn()    { echo -e "${RED}[WARNING]${NC} $1"; }
 
 log "Starting complete cleanup of Envoy Gateway and CloudBees CI resources..."
 
@@ -47,7 +51,7 @@ kubectl delete gatewayclass "${GATEWAY_CLASS_NAME}" --ignore-not-found --timeout
 kubectl patch gatewayclass "${GATEWAY_CLASS_NAME}" -p '{"metadata":{"finalizers":null}}' --type=merge 2>/dev/null
 
 # 5. Delete Namespaces
-log "Deleting namespaces (cloudbees-envoy and envoy-gateway-system)..."
+log "Deleting namespaces (${NAMESPACE} and ${ENVOY_GW_NAMESPACE})..."
 kubectl delete namespace "${NAMESPACE}" --ignore-not-found --timeout=20s || \
 kubectl patch namespace "${NAMESPACE}" -p '{"metadata":{"finalizers":null}}' --type=merge 2>/dev/null
 

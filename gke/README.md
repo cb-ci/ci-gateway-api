@@ -119,7 +119,7 @@ Run the installation script for your chosen method:
 | **Setup Complexity** | Low | Medium (requires proxy-only subnet) |
 | **Network Endpoint Groups** | No | Yes (direct pod routing) |
 
-## 🛠 Prerequisites
+## Prerequisites
 
 ### Common Requirements
 

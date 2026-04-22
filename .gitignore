@@ -2,7 +2,6 @@
 **/jenkins.pem
 **/server.crt
 **/ssl
-**/auth.sh
 gateway-helm
 **/.env
 **/kubeconfig

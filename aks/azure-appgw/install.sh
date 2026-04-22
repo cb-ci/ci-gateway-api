@@ -1,41 +1,39 @@
-#!/bin/bash
+#!/usr/bin/env bash
+# -----------------------------------------------------------------------------
+# install.sh — Install AKS Native Gateway (AppGW) and CloudBees CI on AKS.
+# -----------------------------------------------------------------------------
 set -eo pipefail
+
+# Resolve script directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+
+# Source common functions
+# shellcheck source=/dev/null
+source "${ROOT_DIR}/scripts/_functions.sh"
+
+# Load environment variables
+load_env "${SCRIPT_DIR}/.env"
 
 # --- Configuration ---
 NAMESPACE=${NAMESPACE:-cloudbees-appgw}
 INGRESS_NAME=${INGRESS_NAME:-cloudbees-ingress}
-CJOC_HOST_NAME=${CJOC_HOST_NAME:-gateway-appgw.acaternberg.flow-training.beescloud.com}
+CJOC_HOST_NAME=${CJOC_HOST_NAME:-gateway-appgw.$DOMAIN}
 CLOUDBEES_STORAGE_CLASS=${CLOUDBEES_STORAGE_CLASS:-managed-csi}
-SERVICE_NAME=${SERVICE_NAME:-ha}
 CONTROLLER_NAME=${CONTROLLER_NAME:-ha}
-
-RESOURCE_GROUP=${RESOURCE_GROUP:-cloudbees-rg}
-CLUSTER_NAME=${CLUSTER_NAME:-cb-ci}
-CERT_NAME=acaternberg-cert-selfsigned
-
-
-
-log()     { echo -e "${BLUE}[$(date +'%Y-%m-%dT%H:%M:%S')]${NC} $1"; }
-success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
-warn()    { echo -e "${RED}[WARNING]${NC} $1"; }
-error()   { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
+CERT_DIR="${SCRIPT_DIR}/ssl"
 
 # --- Prerequisite Checks ---
 log "Checking prerequisites..."
-[[ -f "./jenkins.pem" ]] || error "jenkins.pem not found in current directory."
-[[ -f "./server.key" ]]  || error "server.key not found in current directory."
-command -v helm    &>/dev/null || error "helm CLI not found."
-command -v kubectl &>/dev/null || error "kubectl CLI not found."
-command -v az      &>/dev/null || error "az CLI not found."
+check_command helm
+check_command kubectl
+check_command az
 
 # --- AKS Configuration ---
-log "Verifying cluster ${CLUSTER_NAME} is reachable..."
-if ! az aks show --resource-group "${RESOURCE_GROUP}" --name "${CLUSTER_NAME}" &>/dev/null; then
-    error "Cluster ${CLUSTER_NAME} not found in resource group ${RESOURCE_GROUP}."
+log "Verifying cluster ${MY_AKS_CLUSTER_NAME} is reachable..."
+if ! az aks show --resource-group "${MY_RESOURCE_GROUP_NAME}" --name "${MY_AKS_CLUSTER_NAME}" &>/dev/null; then
+    error "Cluster ${MY_AKS_CLUSTER_NAME} not found in resource group ${MY_RESOURCE_GROUP_NAME}."
 fi
-
-log "Getting AKS credentials..."
-az aks get-credentials --resource-group "${RESOURCE_GROUP}" --name "${CLUSTER_NAME}" --overwrite-existing
 
 # --- Verify AGIC is installed ---
 log "Checking if AGIC is installed..."
@@ -50,10 +48,12 @@ kubectl create namespace "${NAMESPACE}" --dry-run=client -o yaml | kubectl apply
 
 # --- TLS Secret ---
 log "Updating TLS secret ${CERT_NAME}..."
+"${ROOT_DIR}/scripts/generate-ssl-cert.sh" "${CJOC_HOST_NAME}"
+
 kubectl delete secret "${CERT_NAME}" -n "${NAMESPACE}" --ignore-not-found
 kubectl create secret tls "${CERT_NAME}" \
-  --cert="./jenkins.pem" \
-  --key="./server.key" \
+  --cert="${CERT_DIR}/jenkins.pem" \
+  --key="${CERT_DIR}/server.key" \
   -n "${NAMESPACE}"
 
 # --- Ingress Resources ---
@@ -96,7 +96,7 @@ spec:
         pathType: Prefix
         backend:
           service:
-            name: ${SERVICE_NAME}
+            name: ${CONTROLLER_NAME}
             port:
               number: 80
 ---
@@ -150,7 +150,7 @@ helm upgrade --install cloudbees-core-appgw cloudbees/cloudbees-core \
   --set Common.image.tag='latest'
 
 # --- Wait for Ingress External IP ---
-log "Waiting for Ingress External IP (this may take several minutes)..."
+log "Waiting for Ingress External IP..."
 INGRESS_IP=""
 MAX_RETRIES=40
 RETRY_COUNT=0
@@ -173,7 +173,7 @@ if [[ -n "$INGRESS_IP" ]]; then
     log "Post-install: Update your DNS A record for ${CJOC_HOST_NAME} to ${INGRESS_IP}"
 else
     echo ""
-    warn "Timed out waiting for Ingress External IP. Check 'kubectl get ingress -n ${NAMESPACE}' and Azure Application Gateway status."
+    warn "Timed out waiting for Ingress External IP. Check 'kubectl get ingress -n ${NAMESPACE}'."
 fi
 
 success "Installation completed successfully."

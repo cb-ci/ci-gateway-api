@@ -1,9 +1,19 @@
 #!/bin/bash
 
-set -e
+set -euo pipefail
 
-current_dir=$(pwd)
-SSL_DIR="./ssl"
+# Resolve script directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+current_dir="$(pwd)"
+# Source common functions
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/_functions.sh"
+
+# Load environment variables
+load_env "${ROOT_DIR}/.env"
+
+SSL_DIR="${ROOT_DIR}/ssl"
 mkdir -p $SSL_DIR
 cd $SSL_DIR
 CERT_FILE="server.crt"
@@ -43,7 +53,5 @@ chmod 644 "${CERT_FILE}"
 # ${KEY_FILE} should not be required in cacert truststore (just the public key is required), but it doesn't hurt to have it for the demo
 #cat "${CERT_FILE}" "${KEY_FILE}" > jenkins.pem
 cat "${CERT_FILE}" > jenkins.pem
-
-
 cd "$current_dir"
 echo "Done."

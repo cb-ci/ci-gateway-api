@@ -1,27 +1,31 @@
-#!/bin/bash
+#!/usr/bin/env bash
+# -----------------------------------------------------------------------------
+# install.sh — Install GKE Native Gateway and CloudBees CI on GKE.
+# -----------------------------------------------------------------------------
 set -eo pipefail
 
-# ---------------------------------------------------------------------------
-# Resolve script directory (safe for both direct execution and sourcing)
-# ---------------------------------------------------------------------------
+# Resolve script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
-# ---------------------------------------------------------------------------
+# Source common functions
+# shellcheck source=/dev/null
+source "${ROOT_DIR}/scripts/_functions.sh"
+
 # Load environment variables
-# ---------------------------------------------------------------------------
-ENV_FILE=".env"
-if [[ -f "${ENV_FILE}" ]]; then
-  # shellcheck source=/dev/null
-  source "${ENV_FILE}"
-else
-  echo "[ERROR] No .env file found at ${ENV_FILE}." >&2
-  echo "        Please create one based on .env.template." >&2
-  return 1 2>/dev/null || exit 1
-fi
+load_env "${SCRIPT_DIR}/.env"
 
+# --- Configuration ---
 NAMESPACE=${NAMESPACE:-cloudbees-google-gw}
 CJOC_HOST_NAME=${CJOC_HOST_NAME:-gateway-google-gw.$DOMAIN}
+CERT_DIR="${SCRIPT_DIR}/ssl"
  
+# --- Prerequisite Checks ---
+log "Checking prerequisites..."
+check_command helm
+check_command kubectl
+check_command gcloud
+
 # --- GKE Configuration ---
 log "Ensuring Gateway API is enabled on cluster ${CLUSTER_NAME}..."
 if ! gcloud container clusters describe "${CLUSTER_NAME}" --zone "${ZONE}" --format="value(status)" &>/dev/null; then
@@ -57,6 +61,8 @@ kubectl create namespace "${NAMESPACE}" --dry-run=client -o yaml | kubectl apply
 
 # --- TLS Secret ---
 log "Updating TLS secret ${CERT_NAME}..."
+"${ROOT_DIR}/scripts/generate-ssl-cert.sh" "${CJOC_HOST_NAME}"
+
 kubectl delete secret "${CERT_NAME}" -n "${NAMESPACE}" --ignore-not-found
 kubectl create secret tls "${CERT_NAME}" \
   --cert="${CERT_DIR}/jenkins.pem" \

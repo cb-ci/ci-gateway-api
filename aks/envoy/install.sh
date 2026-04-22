@@ -1,55 +1,55 @@
-#!/bin/bash
+#!/usr/bin/env bash
+# -----------------------------------------------------------------------------
+# install.sh — Install Envoy Gateway and CloudBees CI on AKS.
+# -----------------------------------------------------------------------------
 set -eo pipefail
+
+# Resolve script directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+
+# Source common functions
+# shellcheck source=/dev/null
+source "${ROOT_DIR}/scripts/_functions.sh"
+
+# Load environment variables
+load_env "${SCRIPT_DIR}/.env"
 
 # --- Configuration ---
 NAMESPACE=${NAMESPACE:-cloudbees-envoy}
 GATEWAY_NAME=${GATEWAY_NAME:-cloudbees-gateway}
-CJOC_HOST_NAME=${CJOC_HOST_NAME:-gateway-envoy.acaternberg.flow-training.beescloud.com}
+CJOC_HOST_NAME=${CJOC_HOST_NAME:-gateway-envoy.$DOMAIN}
 CLOUDBEES_STORAGE_CLASS=${CLOUDBEES_STORAGE_CLASS:-managed-csi}
-SERVICE_NAME=${SERVICE_NAME:-ha}
 CONTROLLER_NAME=${CONTROLLER_NAME:-ha}
-
-RESOURCE_GROUP=${RESOURCE_GROUP:-cloudbees-rg}
-CLUSTER_NAME=${CLUSTER_NAME:-cb-ci}
-CERT_NAME=acaternberg-cert-selfsigned
+CERT_DIR="${SCRIPT_DIR}/ssl"
 
 ENVOY_GATEWAY_VERSION=${ENVOY_GATEWAY_VERSION:-v1.7.1}
 ENVOY_GW_NAMESPACE=envoy-gateway-system
 
-
-log()     { echo -e "${BLUE}[$(date +'%Y-%m-%dT%H:%M:%S')]${NC} $1"; }
-success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
-warn()    { echo -e "${RED}[WARNING]${NC} $1"; }
-error()   { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
-
 # --- Prerequisite Checks ---
 log "Checking prerequisites..."
-[[ -f "./jenkins.pem" ]] || error "jenkins.pem not found in current directory."
-[[ -f "./server.key" ]]  || error "server.key not found in current directory."
-command -v helm    &>/dev/null || error "helm CLI not found."
-command -v kubectl &>/dev/null || error "kubectl CLI not found."
-command -v az      &>/dev/null || error "az CLI not found."
+check_command helm
+check_command kubectl
+check_command az
 
 # --- AKS Configuration ---
-log "Verifying cluster ${CLUSTER_NAME} is reachable..."
-if ! az aks show --resource-group "${RESOURCE_GROUP}" --name "${CLUSTER_NAME}" &>/dev/null; then
-    error "Cluster ${CLUSTER_NAME} not found in resource group ${RESOURCE_GROUP}."
+log "Verifying cluster ${MY_AKS_CLUSTER_NAME} is reachable..."
+if ! az aks show --resource-group "${MY_RESOURCE_GROUP_NAME}" --name "${MY_AKS_CLUSTER_NAME}" &>/dev/null; then
+    error "Cluster ${MY_AKS_CLUSTER_NAME} not found in resource group ${MY_RESOURCE_GROUP_NAME}."
 fi
-
-log "Getting AKS credentials..."
-az aks get-credentials --resource-group "${RESOURCE_GROUP}" --name "${CLUSTER_NAME}" --overwrite-existing
 
 # --- Install Envoy Gateway ---
 log "Installing Envoy Gateway ${ENVOY_GATEWAY_VERSION} via Helm..."
-if [ ! -d "gateway-helm" ]; then
-    rm -rf gateway-helm 2>/dev/null || true
-    helm pull oci://docker.io/envoyproxy/gateway-helm --version "${ENVOY_GATEWAY_VERSION}" --untar
+if [ ! -d "${SCRIPT_DIR}/gateway-helm" ]; then
+    rm -rf "${SCRIPT_DIR}/gateway-helm" 2>/dev/null || true
+    helm pull oci://docker.io/envoyproxy/gateway-helm --version "${ENVOY_GATEWAY_VERSION}" --untar --destination "${SCRIPT_DIR}"
     # Remove bundled Gateway API CRDs to avoid conflicts
-    rm -f gateway-helm/crds/gatewayapi-crds.yaml
+    rm -f "${SCRIPT_DIR}/gateway-helm/crds/gatewayapi-crds.yaml"
 fi
 
 log "Applying Envoy Gateway Helm chart..."
-helm upgrade --install eg ./gateway-helm -n "${ENVOY_GW_NAMESPACE}" --create-namespace
+helm upgrade --install eg "${SCRIPT_DIR}/gateway-helm" -n "${ENVOY_GW_NAMESPACE}" --create-namespace
+
 log "Waiting for Envoy Gateway controller to be ready..."
 kubectl rollout status deployment/envoy-gateway -n "${ENVOY_GW_NAMESPACE}" --timeout=120s
 
@@ -59,15 +59,16 @@ kubectl create namespace "${NAMESPACE}" --dry-run=client -o yaml | kubectl apply
 
 # --- TLS Secret ---
 log "Updating TLS secret ${CERT_NAME}..."
+"${ROOT_DIR}/scripts/generate-ssl-cert.sh" "${CJOC_HOST_NAME}"
+
 kubectl delete secret "${CERT_NAME}" -n "${NAMESPACE}" --ignore-not-found
 kubectl create secret tls "${CERT_NAME}" \
-  --cert="./jenkins.pem" \
-  --key="./server.key" \
+  --cert="${CERT_DIR}/jenkins.pem" \
+  --key="${CERT_DIR}/server.key" \
   -n "${NAMESPACE}"
 
 # --- Envoy Gateway Resources ---
 log "Applying GatewayClass..."
-kubectl delete gatewayclass eg --ignore-not-found
 cat <<EOF | kubectl apply -f -
 apiVersion: gateway.networking.k8s.io/v1
 kind: GatewayClass
@@ -157,7 +158,7 @@ spec:
         type: PathPrefix
         value: /${CONTROLLER_NAME}
     backendRefs:
-    - name: ${SERVICE_NAME}
+    - name: ${CONTROLLER_NAME}
       port: 80
 EOF
 
@@ -231,6 +232,7 @@ log "Deploying CloudBees CI via Helm..."
 helm upgrade --install cloudbees-core-envoy cloudbees/cloudbees-core \
   --namespace "${NAMESPACE}" \
   --set Gateway.Enabled=true \
+  --set Gateway.Name="${GATEWAY_NAME}" \
   --set OperationsCenter.Gateway.Name="${GATEWAY_NAME}" \
   --set OperationsCenter.Gateway.SectionName=https \
   --set OperationsCenter.Gateway.Namespace="${NAMESPACE}" \
@@ -241,7 +243,7 @@ helm upgrade --install cloudbees-core-envoy cloudbees/cloudbees-core \
   --set Common.image.tag='latest'
 
 # --- Wait for Gateway External IP ---
-log "Waiting for Gateway External IP (this may take a few minutes)..."
+log "Waiting for Gateway External IP..."
 GATEWAY_IP=""
 MAX_RETRIES=30
 RETRY_COUNT=0
@@ -264,7 +266,7 @@ if [[ -n "$GATEWAY_IP" ]]; then
     log "Post-install: Update your DNS A record for ${CJOC_HOST_NAME} to ${GATEWAY_IP}"
 else
     echo ""
-    warn "Timed out waiting for Gateway External IP. Check 'kubectl get gateway -n ${NAMESPACE}' and ensure a LoadBalancer IP is assigned."
+    warn "Timed out waiting for Gateway External IP. Check 'kubectl get gateway -n ${NAMESPACE}'."
 fi
 
 success "Installation completed successfully."
