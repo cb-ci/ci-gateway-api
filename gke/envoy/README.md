@@ -1,61 +1,44 @@
 # CloudBees CI on GKE with Envoy Gateway
 
-This directory contains scripts and configurations to deploy CloudBees CI on Google Kubernetes Engine (GKE) using **Envoy Gateway** — a cloud-agnostic, Kubernetes-native implementation of the Gateway API.
+This directory contains resources to deploy CloudBees CI on GKE using **Envoy Gateway**, a cloud-agnostic implementation of the Gateway API.
 
 ## Overview
 
-This setup is the cloud-agnostic equivalent of the [`../google-gw`](../google-gw) setup which uses GKE's proprietary Gateway controller. By using Envoy Gateway, the same Gateway API resources work on any Kubernetes distribution without GCP-specific CRDs.
+By using Envoy Gateway, you can use the same Gateway API resources (Gateway, HTTPRoute) across any Kubernetes distribution. This setup provides:
 
-Key capabilities:
-
-- Deploy **Envoy Gateway** as the Gateway API controller via Helm.
-- Provision a **GatewayClass** backed by Envoy's data plane.
-- Configure **TLS Termination** using Kubernetes secrets (same as GKE setup).
-- Implement **active health checks** via `BackendTrafficPolicy` (replaces GKE `HealthCheckPolicy`).
-- Enable **cookie-based sticky sessions** via `BackendTrafficPolicy` consistent hash (replaces GKE `GCPBackendPolicy`).
-- Deploy CloudBees CI Operations Center (`cjoc`) via Helm.
+- **TLS Termination**: Secured HTTPS access via Kubernetes secrets.
+- **Active Health Checks**: Monitoring backends via `BackendTrafficPolicy`.
+- **Session Affinity**: Sticky sessions for HA controllers using consistent hashing.
 
 ## Prerequisites
 
-- A GKE cluster (version 1.24+ recommended).
-- `gcloud`, `kubectl`, and `helm` CLI tools configured and authenticated.
-- Self-signed or CA-signed certificates (`jenkins.pem` and `server.key`) placed in this directory. See `./generate-ssl-cert.sh` to generate self-signed certificates.
+- Access to a GKE cluster.
+- Completed authentication via [**`gke/auth.sh`**](../auth.sh).
+- Root [**`.env`**](../../.env) file configured.
 
 ## Getting Started
 
-### 1. Configure Environment
+### 1. Generate SSL Certificates
+
+If you don't have existing certificates, generate self-signed ones:
 
 ```bash
-cp .env-template .env
-# Edit .env and fill in your GCP PROJECT_ID and other variables
-```
-
-### 2. Generate Certificates (if needed)
-
-```bash
-cd ../scripts/
-chmod +x generate-ssl-cert.sh
-./generate-ssl-cert.sh gateway-envoy.acaternberg.flow-training.beescloud.com
+# From this directory
+../../scripts/generate-ssl-cert.sh
 ```
 
 ### 2. Installation
 
-Run the installation script. It will:
-
-1. Install **Envoy Gateway** into the `envoy-gateway-system` namespace via Helm.
-2. Create the `cloudbees-envoy` namespace and TLS secret.
-3. Apply the `GatewayClass`, `Gateway`, `HTTPRoute`, and `BackendTrafficPolicy` resources.
-4. Deploy **CloudBees CI** via Helm.
-5. Wait for the Gateway's external IP to be assigned.
+Run the installation script to deploy Envoy Gateway and CloudBees CI:
 
 ```bash
 chmod +x install.sh
 ./install.sh
 ```
 
-### 3. Accessing Operations Center
+### 3. Verification
 
-Once the deployment is complete, retrieve the initial admin password:
+Retrieve the initial admin password and visit the URL provided at the end of the installation script:
 
 ```bash
 kubectl exec -ti cjoc-0 -n cloudbees-envoy -- cat /var/jenkins_home/secrets/initialAdminPassword
@@ -92,12 +75,10 @@ For a detailed look at the traffic flow and component relationships, see [DIAGRA
 
 ### No External IP assigned
 
-Envoy Gateway creates a `Service` of type `LoadBalancer` in the `envoy-gateway-system` namespace. On GKE this is provisioned automatically. Check:
+On GKE, the LoadBalancer service is provisioned automatically. If it's pending:
 
-```bash
-kubectl get svc -n envoy-gateway-system
-kubectl describe gateway cloudbees-gateway -n cloudbees-envoy
-```
+- Check the service status: `kubectl get svc -n envoy-gateway-system`
+- Describe the Gateway: `kubectl describe gateway -n cloudbees-envoy`
 
 ### 503 / No Healthy Upstream
 

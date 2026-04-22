@@ -1,49 +1,47 @@
-# CloudBees CI on GKE with Gateway API
+# CloudBees CI on GKE with Native Gateway API
 
-This repository contains scripts and configurations to deploy CloudBees CI on Google Kubernetes Engine (GKE) using the modern **GKE Gateway API**.
+This directory contains resources to deploy CloudBees CI on GKE using the native **Google Cloud Gateway Controller**, which leverages Regional External Application Load Balancers.
 
 ## Overview
 
-Traditional GKE Ingress is being succeeded by the Gateway API, which provides a more expressive and role-oriented approach to networking. This setup demonstrates how to:
+This setup provides high-performance, managed load balancing that integrates directly with GCP services. This setup provides:
 
-- Provision a **Regional External Application Load Balancer** via the GKE Gateway controller.
-- Deploy  a **Gateway** to route traffic to the CloudBees CI cluster.
-- Configure **TLS Termination** using Kubernetes secrets.
-- Implement a **HealthCheckPolicy** to handle CloudBees CI's custom health paths.
-- Enable **GCPBackendPolicy** for sticky sessions for the HA controller.
-- Deploy CloudBees CI Operations Center (`cjoc`) via Helm.
+- **Regional Management**: Uses Regional Application Load Balancers for lower latency.
+- **Native Health Checks**: Uses GCP-specific `HealthCheckPolicy`.
+- **Managed Session Affinity**: Uses `GCPBackendPolicy` for robust cookie-based stickiness.
 
 ## Prerequisites
 
-- A GKE cluster (version 1.24+ recommended).
-- Gateway API CRDs installed and the Gateway controller enabled.
-- `gcloud`, `kubectl`, and `helm` CLI tools configured.
-- Self-signed or CA-signed certificates (`jenkins.pem` and `server.key`) in the root directory. (see `./generate-certs.sh` for an example of how to generate self-signed certificates)
+- Access to a GKE cluster with Gateway API enabled.
+- Completed authentication via [**`gke/auth.sh`**](../auth.sh).
+- Root [**`.env`**](../../.env) file configured.
 
 ## Getting Started
 
-### 1. Configure Environment
+### 1. Generate SSL Certificates
+
+If you don't have existing certificates, generate self-signed ones:
 
 ```bash
-cp .env-template .env
-# Edit .env and fill in your GCP PROJECT_ID and other variables
+# From this directory
+../../scripts/generate-ssl-cert.sh
 ```
 
 ### 2. Installation
 
-Run the provided installation script. It will enable the necessary GCP services, create the proxy-only subnet (if missing), and deploy the Gateway resources and CloudBees CI.
+Run the installation script to configure networking and deploy CloudBees CI:
 
 ```bash
 chmod +x install.sh
 ./install.sh
 ```
 
-### 2. Accessing Operations Center
+### 3. Verification
 
-Once the deployment is complete and the load balancer has synced (this may take 2-5 minutes), retrieve your initial admin password:
+Retrieve the initial admin password and visit the URL provided at the end of the installation script:
 
 ```bash
-kubectl exec -ti cjoc-0 -n cloudbees-gatewayapi -- cat /var/jenkins_home/secrets/initialAdminPassword
+kubectl exec -ti cjoc-0 -n cloudbees-google-gw -- cat /var/jenkins_home/secrets/initialAdminPassword
 ```
 
 Visit the URL configured in `install.sh` (default: `https://gateway.acaternberg.flow-training.beescloud.com/cjoc`).

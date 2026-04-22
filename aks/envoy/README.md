@@ -1,32 +1,30 @@
 # CloudBees CI on AKS with Envoy Gateway
 
-This directory contains scripts and configurations to deploy CloudBees CI on Azure Kubernetes Service (AKS) using **Envoy Gateway** — a cloud-agnostic, Kubernetes-native implementation of the Gateway API.
+This directory contains resources to deploy CloudBees CI on AKS using **Envoy Gateway**, a cloud-agnostic implementation of the Gateway API.
 
 ## Overview
 
-This setup is the cloud-agnostic equivalent of the [`../azure-appgw`](../azure-appgw) setup which uses Azure's Application Gateway Ingress Controller. By using Envoy Gateway, the same Gateway API resources work on any Kubernetes distribution without Azure-specific CRDs.
+Envoy Gateway provides a standardized way to manage ingress across different Kubernetes environments. This setup provides:
 
-Key capabilities:
-
-- Deploy **Envoy Gateway** as the Gateway API controller via Helm.
-- Provision a **GatewayClass** backed by Envoy's data plane.
-- Configure **TLS Termination** using Kubernetes secrets.
-- Implement **active health checks** via `BackendTrafficPolicy`.
-- Enable **cookie-based sticky sessions** via `BackendTrafficPolicy` consistent hash.
-- Deploy CloudBees CI Operations Center (`cjoc`) via Helm.
+- **TLS Termination**: Secured HTTPS access via Kubernetes secrets.
+- **Active Health Checks**: Monitoring backends via `BackendTrafficPolicy`.
+- **Session Affinity**: Sticky sessions for HA controllers using consistent hashing.
 
 ## Prerequisites
 
-- An AKS cluster (version 1.24+ recommended).
-- `az`, `kubectl`, and `helm` CLI tools configured and authenticated.
-- Self-signed or CA-signed certificates (`jenkins.pem` and `server.key`). See `../scripts/generate-ssl-cert.sh` to generate self-signed certificates.
+- Access to an AKS cluster.
+- Completed authentication via [**`aks/auth.sh`**](../auth.sh).
+- Root [**`.env`**](../../.env) file configured.
 
 ## Getting Started
 
-### 1. Generate Certificates (if needed)
+### 1. Generate SSL Certificates
+
+If you don't have existing certificates, generate self-signed ones:
 
 ```bash
-CJOC_HOST=gateway-envoy.acaternberg.flow-training.beescloud.com ../scripts/generate-ssl-cert.sh
+# From this directory
+../../scripts/generate-ssl-cert.sh
 ```
 
 ### 2. Installation
@@ -83,12 +81,10 @@ For a detailed look at the traffic flow and component relationships, see [DIAGRA
 
 ### No External IP assigned
 
-Envoy Gateway creates a `Service` of type `LoadBalancer` in the `envoy-gateway-system` namespace. On AKS this is provisioned automatically. Check:
+On AKS, Envoy Gateway exposes a LoadBalancer service. If it's pending:
 
-```bash
-kubectl get svc -n envoy-gateway-system
-kubectl describe gateway cloudbees-gateway -n cloudbees-envoy
-```
+- Check the service status: `kubectl get svc -n envoy-gateway-system`
+- Describe the Gateway: `kubectl describe gateway -n cloudbees-envoy`
 
 ### 503 / No Healthy Upstream
 

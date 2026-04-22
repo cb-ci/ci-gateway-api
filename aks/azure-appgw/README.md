@@ -1,45 +1,35 @@
-# CloudBees CI on AKS with Azure Application Gateway Ingress Controller
+# CloudBees CI on AKS with Azure Application Gateway
 
-This directory contains scripts and configurations to deploy CloudBees CI on Azure Kubernetes Service (AKS) using the **Azure Application Gateway Ingress Controller (AGIC)**.
+This directory contains resources to deploy CloudBees CI on AKS using the native **Azure Application Gateway Ingress Controller (AGIC)**.
 
 ## Overview
 
-This setup demonstrates how to leverage Azure's native Application Gateway as an ingress controller for AKS. This is the Azure-equivalent of the GKE Gateway API approach, providing tight integration with Azure networking services.
+AGIC provides a direct integration between Kubernetes ingress and Azure's managed Application Gateway, enabling L7 load balancing. This setup provides:
 
-Key capabilities:
-
-- Deploy **Azure Application Gateway Ingress Controller (AGIC)** via Helm.
-- Provision an **Azure Application Gateway** as the ingress layer.
-- Configure **TLS Termination** using Kubernetes secrets.
-- Implement **Azure health probes** for custom health paths.
-- Enable **cookie-based session affinity** for HA controllers.
-- Deploy CloudBees CI Operations Center (`cjoc`) via Helm.
+- **Managed Infrastructure**: Offloads load balancing to a dedicated Azure service.
+- **Enterprise Features**: Supports WAF and native Azure Monitor integration.
+- **Cookie Affinity**: Native Azure cookie-based session affinity for controllers.
 
 ## Prerequisites
 
-- An AKS cluster with AGIC enabled or add-on installed (version 1.24+ recommended).
-- An Azure Application Gateway provisioned (or let AGIC create one).
-- `az`, `kubectl`, and `helm` CLI tools configured and authenticated.
-- Self-signed or CA-signed certificates (`jenkins.pem` and `server.key`). See `../scripts/generate-ssl-cert.sh` to generate self-signed certificates.
-- Azure permissions to manage Application Gateway resources.
+- Access to an AKS cluster.
+- Completed authentication via [**`aks/auth.sh`**](../auth.sh).
+- Root [**`.env`**](../../.env) file configured.
 
 ## Getting Started
 
-### 1. Generate Certificates (if needed)
+### 1. Generate SSL Certificates
+
+If you don't have existing certificates, generate self-signed ones:
 
 ```bash
-CJOC_HOST=gateway-appgw.acaternberg.flow-training.beescloud.com ../scripts/generate-ssl-cert.sh
+# From this directory
+../../scripts/generate-ssl-cert.sh
 ```
 
 ### 2. Installation
 
-Run the installation script. It will:
-
-1. Verify AKS cluster and AGIC installation.
-2. Create the `cloudbees-appgw` namespace and TLS secret.
-3. Apply Ingress resources with Azure-specific annotations.
-4. Deploy **CloudBees CI** via Helm.
-5. Wait for the Application Gateway to provision the public IP.
+Run the installation script to deploy AGIC and CloudBees CI:
 
 ```bash
 chmod +x install.sh
