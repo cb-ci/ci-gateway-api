@@ -48,10 +48,10 @@ if [ ! -d "${SCRIPT_DIR}/gateway-helm" ]; then
 fi
 
 log "Applying Envoy Gateway Helm chart..."
-#helm upgrade --install eg "${SCRIPT_DIR}/gateway-helm" -n "${ENVOY_GW_NAMESPACE}" --create-namespace
+helm upgrade --install eg "${SCRIPT_DIR}/gateway-helm" -n "${ENVOY_GW_NAMESPACE}" --create-namespace
 
 log "Waiting for Envoy Gateway controller to be ready..."
-#kubectl rollout status deployment/envoy-gateway -n "${ENVOY_GW_NAMESPACE}" --timeout=120s
+kubectl rollout status deployment/envoy-gateway -n "${ENVOY_GW_NAMESPACE}" --timeout=120s
 
 # --- Kubernetes Namespace ---
 log "Configuring namespace ${NAMESPACE}..."
@@ -78,6 +78,8 @@ metadata:
 spec:
   controllerName: gateway.envoyproxy.io/gatewayclass-controller
 EOF
+
+# 
 
 log "Applying Gateway..."
 cat <<EOF | kubectl apply -f -
