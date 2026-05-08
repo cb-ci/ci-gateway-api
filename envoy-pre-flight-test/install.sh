@@ -206,26 +206,14 @@ EOF
 
 # --- Wait for Gateway IP ---
 log "Waiting for Gateway External IP..."
-ADDRESS=""
-MAX_RETRIES=10
-RETRY_COUNT=0
-
-while [[ -z "$ADDRESS" && $RETRY_COUNT -lt $MAX_RETRIES ]]; do
-    ADDRESS=$(kubectl get gateway "${GATEWAY_NAME}" -n "${NAMESPACE}" -o jsonpath='{.status.addresses[0].value}' 2>/dev/null)
-    if [[ -z "$ADDRESS" ]]; then
-        echo -n "."
-        sleep 30
-        ((RETRY_COUNT++))
-    fi
-done
+sleep 120
+ADDRESS=$(kubectl get gateway "${GATEWAY_NAME}" -n "${NAMESPACE}" -o jsonpath='{.status.addresses[0].value}' 2>/dev/null)
 
 if [[ -n "$ADDRESS" ]]; then
-    echo ""
     success "Gateway IP assigned: ${ADDRESS}"
     log "Testing connection to https://${ADDRESS}/test . We need to wait until an LB gets created"
     curl -Lvk "https://${ADDRESS}/test" --connect-timeout 60 --max-time 120
 else
-    echo ""
     error "Timed out waiting for Gateway IP."
     exit 1
 fi
