@@ -18,7 +18,7 @@ load_env "${ROOT_DIR}/.env"
 ENVOY_GATEWAY_VERSION=${ENVOY_GATEWAY_VERSION:-latest}
 ENVOY_GW_NAMESPACE=envoy-gateway-system
 GATEWAY_CLASS_NAME=eg
-GATEWAY_NAME=test-gateway
+GATEWAY_NAME=test-gateway-1
 GATEWAY_ROUTE_NAME=test-route
 GATEWAY_POLICY_NAME=test-traffic-policy
 CERT_DIR="${ROOT_DIR}/ssl"
@@ -211,7 +211,7 @@ MAX_RETRIES=10
 RETRY_COUNT=0
 
 while [[ -z "$ADDRESS" && $RETRY_COUNT -lt $MAX_RETRIES ]]; do
-    ADDRESS=$(kubectl get gateway "${GATEWAY_NAME}" -n "${NAMESPACE}" -o jsonpath='{.status.addresses[0].value}' 2>/dev/null || echo "")
+    ADDRESS=$(kubectl get gateway "${GATEWAY_NAME}" -n "${NAMESPACE}" -o jsonpath='{.status.addresses[0].value}' 2>/dev/null)
     if [[ -z "$ADDRESS" ]]; then
         echo -n "."
         sleep 30
@@ -222,8 +222,8 @@ done
 if [[ -n "$ADDRESS" ]]; then
     echo ""
     success "Gateway IP assigned: ${ADDRESS}"
-    log "Testing connection to https://${ADDRESS}/test"
-    curl -Lvk "https://${ADDRESS}/test"
+    log "Testing connection to https://${ADDRESS}/test . We need to wait until an LB gets created"
+    curl -Lvk "https://${ADDRESS}/test" --connect-timeout 60 --max-time 120
 else
     echo ""
     error "Timed out waiting for Gateway IP."
