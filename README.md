@@ -2,7 +2,7 @@
 
 This repository provides a comprehensive guide and ready-to-use scripts for deploying CloudBees CI on Google Kubernetes Engine (GKE) and Azure Kubernetes Service (AKS) using the modern [Kubernetes Gateway API](https://gateway-api.sigs.k8s.io/).
 
-WARNING: This reposiotry contains very raw deployments approaches. CloudBees released the official documentation on this topic and the Gateway API is GA in the meanwhile. Do not use this repository for production. The proper way forward is to use [CloudBees documentation](https://docs.cloudbees.com/docs/cloudbees-ci/latest/kubernetes-install-guide/gateway-api-intro).
+WARNING: This repository contains very raw deployment approaches. CloudBees released the official documentation on this topic, and the Gateway API is GA in the meantime. Do not use this repository for production. The proper way forward is to use [CloudBees documentation](https://docs.cloudbees.com/docs/cloudbees-ci/latest/kubernetes-install-guide/gateway-api-intro).
 
 ## Purpose
 
