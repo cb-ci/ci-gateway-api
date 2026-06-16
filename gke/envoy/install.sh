@@ -8,7 +8,7 @@ set -euo pipefail
 
 # Resolve script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 # Source common functions
 # shellcheck source=/dev/null
@@ -20,8 +20,9 @@ load_env "${ROOT_DIR}/.env"
 # --- Configuration ---
 ENVOY_GATEWAY_VERSION=${ENVOY_GATEWAY_VERSION:-latest}
 ENVOY_GW_NAMESPACE=envoy-gateway-system
-CERT_DIR="${ROOT_DIR}/ssl"
 
+CERT_DIR="${ROOT_DIR}/ssl"
+#CERT_DIR="${ROOT_DIR}"
 # --- Prerequisite Checks ---
 log "Checking prerequisites..."
 check_command helm
@@ -38,30 +39,54 @@ if ! gcloud container clusters describe "${CLUSTER_NAME}" --zone "${ZONE}" --for
 fi
 
 # --- Install Envoy Gateway ---
-log "Installing Envoy Gateway ${ENVOY_GATEWAY_VERSION} via Helm..."
-# GKE forbids installing Gateway API CRDs beyond the standard channel.
-# We pull the chart locally and remove the bundled Gateway API CRDs to avoid admission webhook errors.
-if [ ! -d "${SCRIPT_DIR}/gateway-helm" ]; then
-    rm -rf "${SCRIPT_DIR}/gateway-helm" 2>/dev/null || true
-    helm pull oci://docker.io/envoyproxy/gateway-helm --version "${ENVOY_GATEWAY_VERSION}" --untar --destination "${SCRIPT_DIR}"
-    rm -f "${SCRIPT_DIR}/gateway-helm/crds/gatewayapi-crds.yaml"
-fi
+log "Uninstalling Envoy Gateway ${ENVOY_GATEWAY_VERSION} via Helm..."
+# Remove finalizers from gateway classes or gateways to prevent deletion from hanging
+kubectl patch gatewayclass eg -p '{"metadata":{"finalizers":null}}' --type=merge &>/dev/null || true
+kubectl patch gateway "${GATEWAY_NAME}" -n "${NAMESPACE}" -p '{"metadata":{"finalizers":null}}' --type=merge &>/dev/null || true
 
-log "Applying Envoy Gateway Helm chart..."
-helm upgrade --install eg "${SCRIPT_DIR}/gateway-helm" -n "${ENVOY_GW_NAMESPACE}" --create-namespace
+helm uninstall eg -n "${ENVOY_GW_NAMESPACE}" || true
+kubectl delete ns "${ENVOY_GW_NAMESPACE}" --ignore-not-found
+kubectl create ns "${ENVOY_GW_NAMESPACE}" 
+
+# log "Uninstalling existing Envoy Gateway CRDs..."
+helm template eg-crds oci://docker.io/envoyproxy/gateway-crds-helm \
+  --version "${ENVOY_GATEWAY_VERSION}" \
+  --set crds.gatewayAPI.enabled=true \
+  --set crds.gatewayAPI.channel=standard \
+  --set crds.envoyGateway.enabled=true \
+  | kubectl delete --ignore-not-found=true -f - || true
+
+log "Applying Envoy Gateway CRDs..."
+helm template eg-crds oci://docker.io/envoyproxy/gateway-crds-helm \
+--version "${ENVOY_GATEWAY_VERSION}" \
+--set crds.gatewayAPI.enabled=true \
+--set crds.gatewayAPI.channel=standard \
+--set crds.envoyGateway.enabled=true \
+| kubectl apply --server-side --force-conflicts -f -
+
+log "Installing Envoy Gateway ${ENVOY_GATEWAY_VERSION} via Helm..."
+
+
+helm upgrade --install eg oci://docker.io/envoyproxy/gateway-helm \
+--version "${ENVOY_GATEWAY_VERSION}" \
+--namespace "${ENVOY_GW_NAMESPACE}" \
+--create-namespace \
+--skip-crds
 
 log "Waiting for Envoy Gateway controller to be ready..."
 kubectl rollout status deployment/envoy-gateway -n "${ENVOY_GW_NAMESPACE}" --timeout=120s
 
-# --- Kubernetes Namespace ---
+# --- Create Kubernetes Namespace for CJOC---
 log "Configuring namespace ${NAMESPACE}..."
 kubectl create namespace "${NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f -
+kubectl label namespace ${NAMESPACE} cloudbees.com/gateway-routes=enabled
 
 # --- TLS Secret ---
 log "Updating TLS secret ${CERT_NAME}..."
 "${ROOT_DIR}/scripts/generate-ssl-cert.sh" "${CJOC_HOST_NAME}"
 
 kubectl delete secret "${CERT_NAME}" -n "${NAMESPACE}" --ignore-not-found
+#kubectl create secret tls "${CERT_NAME}" --key $CERT_DIR/privkey.pem --cert $CERT_DIR/fullchain.pem --namespace=$NAMESPACE
 kubectl create secret tls "${CERT_NAME}" \
   --cert="${CERT_DIR}/jenkins.pem" \
   --key="${CERT_DIR}/server.key" \
@@ -78,10 +103,10 @@ metadata:
 spec:
   controllerName: gateway.envoyproxy.io/gatewayclass-controller
 EOF
-
-# 
+ 
 
 log "Applying Gateway..."
+kubectl delete gateway ${GATEWAY_NAME} -n ${NAMESPACE} --ignore-not-found
 cat <<EOF | kubectl apply -f -
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
@@ -104,128 +129,6 @@ spec:
         from: All
 EOF
 
-log "Applying HTTPRoutes (cjoc and ha)..."
-cat <<EOF | kubectl apply -f -
-apiVersion: gateway.networking.k8s.io/v1
-kind: HTTPRoute
-metadata:
-  name: cjoc-route
-  namespace: ${NAMESPACE}
-spec:
-  parentRefs:
-  - name: ${GATEWAY_NAME}
-    namespace: ${NAMESPACE}
-    sectionName: https
-  hostnames:
-  - "${CJOC_HOST_NAME}"
-  rules:
-  - filters:
-    - type: RequestHeaderModifier
-      requestHeaderModifier:
-        set:
-          - name: "X-Forwarded-Port"
-            value: "443"
-          - name: "X-Forwarded-Proto"
-            value: "https"
-  - matches:
-    - path:
-        type: PathPrefix
-        value: /cjoc
-    backendRefs:
-    - name: cjoc
-      port: 80
----
-apiVersion: gateway.networking.k8s.io/v1
-kind: HTTPRoute
-metadata:
-  name: ha-route
-  namespace: ${NAMESPACE}
-spec:
-  parentRefs:
-  - name: ${GATEWAY_NAME}
-    namespace: ${NAMESPACE}
-    sectionName: https
-  hostnames:
-  - "${CJOC_HOST_NAME}"
-  rules:
-  - filters:
-    - type: RequestHeaderModifier
-      requestHeaderModifier:
-        set:
-          - name: "X-Forwarded-Port"
-            value: "443"
-          - name: "X-Forwarded-Proto"
-            value: "https"
-  - matches:
-    - path:
-        type: PathPrefix
-        value: /${CONTROLLER_NAME}
-    backendRefs:
-    - name: ${CONTROLLER_NAME}
-      port: 80
-EOF
-
-log "Applying BackendTrafficPolicy — active health checks for cjoc..."
-cat <<EOF | kubectl apply -f -
-apiVersion: gateway.envoyproxy.io/v1alpha1
-kind: BackendTrafficPolicy
-metadata:
-  name: cjoc-health-check-policy
-  namespace: ${NAMESPACE}
-spec:
-  targetRefs:
-  - group: gateway.networking.k8s.io
-    kind: HTTPRoute
-    name: cjoc-route
-  healthCheck:
-    active:
-      type: HTTP
-      http:
-        path: /cjoc/health/
-        method: GET
-        expectedStatuses:
-        - 200
-      interval: 10s
-      timeout: 5s
-      unhealthyThreshold: 3
-      healthyThreshold: 1
-EOF
-
-log "Applying BackendTrafficPolicy — active health checks + sticky sessions for ${CONTROLLER_NAME}..."
-cat <<EOF | kubectl apply -f -
-apiVersion: gateway.envoyproxy.io/v1alpha1
-kind: BackendTrafficPolicy
-metadata:
-  name: ${CONTROLLER_NAME}-traffic-policy
-  namespace: ${NAMESPACE}
-spec:
-  targetRefs:
-  - group: gateway.networking.k8s.io
-    kind: HTTPRoute
-    name: ha-route
-  healthCheck:
-    active:
-      type: HTTP
-      http:
-        path: /${CONTROLLER_NAME}/health/
-        method: GET
-        expectedStatuses:
-        - 200
-      interval: 10s
-      timeout: 5s
-      unhealthyThreshold: 3
-      healthyThreshold: 1
-  loadBalancer:
-    type: ConsistentHash
-    consistentHash:
-      type: Cookie
-      cookie:
-        name: CBCI_SESSION
-        ttl: 3600s
-        attributes:
-          SameSite: Strict
-EOF
-
 # --- Helm Deployment ---
 log "Updating Helm repositories..."
 helm repo add cloudbees https://charts.cloudbees.com/public/cloudbees || true
@@ -244,6 +147,11 @@ helm upgrade --install cloudbees-core-envoy cloudbees/cloudbees-core \
   --set Agents.SeparateNamespace.Enabled=false \
   --set Persistence.StorageClass="${CLOUDBEES_STORAGE_CLASS}" \
   --set Common.image.tag='latest'
+
+ # --set Agents.ImagePullSecrets=<secret> \
+ # --set OperationsCenter.ImagePullSecrets=<secret> 
+
+
 
 # --- Wait for Gateway External IP ---
 log "Waiting for Gateway External IP (this may take a few minutes)..."
