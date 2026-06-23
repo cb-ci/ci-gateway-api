@@ -139,7 +139,7 @@ helm upgrade --install cloudbees-core-envoy cloudbees/cloudbees-core \
   --namespace "${NAMESPACE}" \
   --set Gateway.Enabled=true \
   --set Gateway.Name="${GATEWAY_NAME}" \
-  --set Gateway.SectionName=http \
+  --set Gateway.SectionName=https \
   --set Gateway.Namespace="${NAMESPACE}" \
   --set OperationsCenter.HostName="${CJOC_HOST_NAME}" \
   --set OperationsCenter.Protocol=https \
