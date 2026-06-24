@@ -1,5 +1,5 @@
 jenkins:
-  systemMessage: "Configured by CasC Bundle v3"
+  systemMessage: "Configured by CasC Bundle v1"
   # https://$(HOSTNAME}/cjoc/manage/configureSecurity/, Security -> Authorization
   # enable rbac https://docs.cloudbees.com/docs/cloudbees-ci/latest/casc-commons/rbac
   authorizationStrategy: "cloudBeesRoleBasedAccessControl"
@@ -83,7 +83,7 @@ unclassified:
           SCM:
             ghChecksActivated: false
             scmSource:
-              gitSource:
+              git:
                 credentialsId: "gh-user-token"
                 id: "3840DCA9-E771-4039-9CCE-290BBE357976"
                 remote: "${CASC_SCM_REPO}"

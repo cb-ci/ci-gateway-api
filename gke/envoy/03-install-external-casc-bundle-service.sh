@@ -58,35 +58,35 @@ EOF
 #   Bundle Service then distributes controller-level bundles to managed controllers.
 # Reference: https://docs.cloudbees.com/docs/cloudbees-ci/latest/casc-controller/set-up-managed-controller-with-service
 echo "Deploying CloudBees CI with CasC Controller Bundle Service via Helm..."
-# helm upgrade --install cloudbees-core-envoy cloudbees/cloudbees-core \
-#   --namespace "${NAMESPACE}" \
-#   --set Gateway.Enabled=true \
-#   --set Gateway.Name="${GATEWAY_NAME}" \
-#   --set Gateway.SectionName=https \
-#   --set Gateway.Namespace="${NAMESPACE}" \
-#   --set OperationsCenter.HostName="${CJOC_HOST_NAME}" \
-#   --set OperationsCenter.Protocol=https \
-#   --set Agents.SeparateNamespace.Enabled=false \
-#   --set Persistence.StorageClass="${CLOUDBEES_STORAGE_CLASS}" \
-#   --set Common.image.tag='latest' \
-#   --set OperationsCenter.CasC.Enabled=true \
-#   --set OperationsCenter.CasC.Retriever.Enabled=true \
-#   --set OperationsCenter.CasC.Retriever.scmRepo="${CASC_SCM_REPO}" \
-#   --set OperationsCenter.CasC.Retriever.scmBundlePath="${CASC_SCM_BUNDLE_PATH}" \
-#   --set OperationsCenter.CasC.Retriever.scmBranch="${CASC_SCM_BRANCH}" \
-#   --set OperationsCenter.CasC.Retriever.scmPollingInterval="PT1M" \
-#   --set OperationsCenter.CasC.Retriever.secrets.scmUsername="githubUser" \
-#   --set OperationsCenter.CasC.Retriever.secrets.scmPassword="githubToken" \
-#   --set OperationsCenter.CasC.Retriever.secrets.secretName="cjoc-secrets" \
-#   --set OperationsCenter.ContainerEnvFrom[0].configMapRef.name="cjoc-casc-envvars" \
-#   --set OperationsCenter.ExtraVolumes[0].name="cjoc-secrets" \
-#   --set OperationsCenter.ExtraVolumes[0].secret.secretName="cjoc-secrets" \
-#   --set OperationsCenter.ExtraVolumeMounts[0].name="cjoc-secrets" \
-#   --set OperationsCenter.ExtraVolumeMounts[0].mountPath="/var/run/secrets/cjoc" \
-#   --set OperationsCenter.ExtraVolumeMounts[0].readOnly=true \
-#   --set CascBundleService.enabled=true \
-#   --set CassBundleService.createConfig=true \
-#   --debug
+helm upgrade --install cloudbees-core-envoy cloudbees/cloudbees-core \
+  --namespace "${NAMESPACE}" \
+  --set Gateway.Enabled=true \
+  --set Gateway.Name="${GATEWAY_NAME}" \
+  --set Gateway.SectionName=https \
+  --set Gateway.Namespace="${NAMESPACE}" \
+  --set OperationsCenter.HostName="${CJOC_HOST_NAME}" \
+  --set OperationsCenter.Protocol=https \
+  --set Agents.SeparateNamespace.Enabled=false \
+  --set Persistence.StorageClass="${CLOUDBEES_STORAGE_CLASS}" \
+  --set Common.image.tag='latest' \
+  --set OperationsCenter.CasC.Enabled=true \
+  --set OperationsCenter.CasC.Retriever.Enabled=true \
+  --set OperationsCenter.CasC.Retriever.scmRepo="${CASC_SCM_REPO}" \
+  --set OperationsCenter.CasC.Retriever.scmBundlePath="${CASC_SCM_BUNDLE_PATH}" \
+  --set OperationsCenter.CasC.Retriever.scmBranch="${CASC_SCM_BRANCH}" \
+  --set OperationsCenter.CasC.Retriever.scmPollingInterval="PT1M" \
+  --set OperationsCenter.CasC.Retriever.secrets.scmUsername="githubUser" \
+  --set OperationsCenter.CasC.Retriever.secrets.scmPassword="githubToken" \
+  --set OperationsCenter.CasC.Retriever.secrets.secretName="cjoc-secrets" \
+  --set OperationsCenter.ContainerEnvFrom[0].configMapRef.name="cjoc-casc-envvars" \
+  --set OperationsCenter.ExtraVolumes[0].name="cjoc-secrets" \
+  --set OperationsCenter.ExtraVolumes[0].secret.secretName="cjoc-secrets" \
+  --set OperationsCenter.ExtraVolumeMounts[0].name="cjoc-secrets" \
+  --set OperationsCenter.ExtraVolumeMounts[0].mountPath="/var/run/secrets/cjoc" \
+  --set OperationsCenter.ExtraVolumeMounts[0].readOnly=true \
+  --set CascBundleService.enabled=true \
+  --set CassBundleService.createConfig=true \
+  --debug
 
 cat <<EOF | kubectl replace secret generic casc-bundle-service-config  -n ${NAMESPACE} -f - 
 apiVersion: v1
@@ -102,7 +102,7 @@ stringData:
     - id: id1
       url: ${CASC_SCM_REPO}
       branch: ${CASC_SCM_BRANCH}
-      path: ${CASC_SCM_BUNDLE_PATH}
+      path: ${CASC_SCM_BUNDLE_PATH}/controller-base
       type: scm
       credential:
         user: ${CASC_SCM_USERNAME}
