@@ -6,3 +6,4 @@ gateway-helm
 **/.env
 **/kubeconfig
 gke_gcloud_auth_plugin_cache
+cloudbees-core
