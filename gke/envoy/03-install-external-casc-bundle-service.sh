@@ -87,6 +87,8 @@ helm upgrade --install cloudbees-core-envoy cloudbees/cloudbees-core \
   --set OperationsCenter.ExtraVolumeMounts[0].readOnly=true \
   --set CascBundleService.enabled=true \
   --set CassBundleService.createConfig=true \
+  --set CascBundleService.pollingSchedule=1m \
+  --set Master.tokenReviewEnabled=true \
   --debug
 
 cat <<EOF | kubectl replace secret generic casc-bundle-service-config  -n ${NAMESPACE} -f - 
