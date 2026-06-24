@@ -43,6 +43,7 @@ data:
   GATEWAY_DOMAIN: "${CJOC_HOST_NAME}"
   GATEWAY_PORT: "443"
   CASC_SCM_BRANCH: "${CASC_SCM_BRANCH}"
+  CASC_SCM_REPO: "${CASC_SCM_REPO}"
   CONTROLLER_STORAGE_CLASS: "${CLOUDBEES_STORAGE_CLASS}"  
 EOF
 
@@ -72,7 +73,7 @@ helm upgrade --install cloudbees-core-envoy cloudbees/cloudbees-core \
   --set OperationsCenter.CasC.Enabled=true \
   --set OperationsCenter.CasC.Retriever.Enabled=true \
   --set OperationsCenter.CasC.Retriever.scmRepo="${CASC_SCM_REPO}" \
-  --set OperationsCenter.CasC.Retriever.scmBundlePath="${CASC_SCM_BUNDLE_PATH}" \
+  --set OperationsCenter.CasC.Retriever.scmBundlePath="${CASC_SCM_BUNDLE_PATH_CJOC}" \
   --set OperationsCenter.CasC.Retriever.scmBranch="${CASC_SCM_BRANCH}" \
   --set OperationsCenter.CasC.Retriever.scmPollingInterval="PT1M" \
   --set OperationsCenter.CasC.Retriever.secrets.scmUsername="githubUser" \

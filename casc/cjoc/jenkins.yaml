@@ -86,7 +86,7 @@ unclassified:
               git:
                 credentialsId: "gh-user-token"
                 id: "3840DCA9-E771-4039-9CCE-290BBE357976"
-                remote: "${CASC_SCM_REPO}"
+                remote: ${CASC_SCM_REPO}
                 traits:
                   - "gitBranchDiscovery"
                   - headWildcardFilter:
