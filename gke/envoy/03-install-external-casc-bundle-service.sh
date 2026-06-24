@@ -58,37 +58,37 @@ EOF
 #   Bundle Service then distributes controller-level bundles to managed controllers.
 # Reference: https://docs.cloudbees.com/docs/cloudbees-ci/latest/casc-controller/set-up-managed-controller-with-service
 echo "Deploying CloudBees CI with CasC Controller Bundle Service via Helm..."
-helm upgrade --install cloudbees-core-envoy cloudbees/cloudbees-core \
-  --namespace "${NAMESPACE}" \
-  --set Gateway.Enabled=true \
-  --set Gateway.Name="${GATEWAY_NAME}" \
-  --set Gateway.SectionName=https \
-  --set Gateway.Namespace="${NAMESPACE}" \
-  --set OperationsCenter.HostName="${CJOC_HOST_NAME}" \
-  --set OperationsCenter.Protocol=https \
-  --set Agents.SeparateNamespace.Enabled=false \
-  --set Persistence.StorageClass="${CLOUDBEES_STORAGE_CLASS}" \
-  --set Common.image.tag='latest' \
-  --set OperationsCenter.CasC.Enabled=true \
-  --set OperationsCenter.CasC.Retriever.Enabled=true \
-  --set OperationsCenter.CasC.Retriever.scmRepo="${CASC_SCM_REPO}" \
-  --set OperationsCenter.CasC.Retriever.scmBundlePath="${CASC_SCM_BUNDLE_PATH}" \
-  --set OperationsCenter.CasC.Retriever.scmBranch="${CASC_SCM_BRANCH}" \
-  --set OperationsCenter.CasC.Retriever.scmPollingInterval="PT1M" \
-  --set OperationsCenter.CasC.Retriever.secrets.scmUsername="githubUser" \
-  --set OperationsCenter.CasC.Retriever.secrets.scmPassword="githubToken" \
-  --set OperationsCenter.CasC.Retriever.secrets.secretName="cjoc-secrets" \
-  --set OperationsCenter.ContainerEnvFrom[0].configMapRef.name="cjoc-casc-envvars" \
-  --set OperationsCenter.ExtraVolumes[0].name="cjoc-secrets" \
-  --set OperationsCenter.ExtraVolumes[0].secret.secretName="cjoc-secrets" \
-  --set OperationsCenter.ExtraVolumeMounts[0].name="cjoc-secrets" \
-  --set OperationsCenter.ExtraVolumeMounts[0].mountPath="/var/run/secrets/cjoc" \
-  --set OperationsCenter.ExtraVolumeMounts[0].readOnly=true \
-  --set CascBundleService.enabled=true \
-  --set CassBundleService.createConfig=true \
-  --debug
+# helm upgrade --install cloudbees-core-envoy cloudbees/cloudbees-core \
+#   --namespace "${NAMESPACE}" \
+#   --set Gateway.Enabled=true \
+#   --set Gateway.Name="${GATEWAY_NAME}" \
+#   --set Gateway.SectionName=https \
+#   --set Gateway.Namespace="${NAMESPACE}" \
+#   --set OperationsCenter.HostName="${CJOC_HOST_NAME}" \
+#   --set OperationsCenter.Protocol=https \
+#   --set Agents.SeparateNamespace.Enabled=false \
+#   --set Persistence.StorageClass="${CLOUDBEES_STORAGE_CLASS}" \
+#   --set Common.image.tag='latest' \
+#   --set OperationsCenter.CasC.Enabled=true \
+#   --set OperationsCenter.CasC.Retriever.Enabled=true \
+#   --set OperationsCenter.CasC.Retriever.scmRepo="${CASC_SCM_REPO}" \
+#   --set OperationsCenter.CasC.Retriever.scmBundlePath="${CASC_SCM_BUNDLE_PATH}" \
+#   --set OperationsCenter.CasC.Retriever.scmBranch="${CASC_SCM_BRANCH}" \
+#   --set OperationsCenter.CasC.Retriever.scmPollingInterval="PT1M" \
+#   --set OperationsCenter.CasC.Retriever.secrets.scmUsername="githubUser" \
+#   --set OperationsCenter.CasC.Retriever.secrets.scmPassword="githubToken" \
+#   --set OperationsCenter.CasC.Retriever.secrets.secretName="cjoc-secrets" \
+#   --set OperationsCenter.ContainerEnvFrom[0].configMapRef.name="cjoc-casc-envvars" \
+#   --set OperationsCenter.ExtraVolumes[0].name="cjoc-secrets" \
+#   --set OperationsCenter.ExtraVolumes[0].secret.secretName="cjoc-secrets" \
+#   --set OperationsCenter.ExtraVolumeMounts[0].name="cjoc-secrets" \
+#   --set OperationsCenter.ExtraVolumeMounts[0].mountPath="/var/run/secrets/cjoc" \
+#   --set OperationsCenter.ExtraVolumeMounts[0].readOnly=true \
+#   --set CascBundleService.enabled=true \
+#   --set CassBundleService.createConfig=true \
+#   --debug
 
-cat <<EOF > kubectl replace secret generic casc-bundle-service-config  -n ${NAMESPACE} --from-file service-configuration.yaml=<your-secret-yaml-file> 
+cat <<EOF | kubectl replace secret generic casc-bundle-service-config  -n ${NAMESPACE} -f - 
 apiVersion: v1
 kind: Secret
 metadata:
@@ -100,35 +100,14 @@ stringData:
   service-configuration.yaml: |
     connectors:
     - id: id1
-      url: https://<your-repository1-url>
-      webhookSecret: <your-webhook-secret> 
-      credential:
-        credentialId: cred1
-        type: reference
-    - id: id2
-      url: https://<your-repository2-url>
-      branch: testBranch
-      path: testPath
+      url: ${CASC_SCM_REPO}
+      branch: ${CASC_SCM_BRANCH}
+      path: ${CASC_SCM_BUNDLE_PATH}
       type: scm
       credential:
-        user: bob
-        password: fake
+        user: ${CASC_SCM_USERNAME}
+        password: ${CASC_SCM_PASSWORD}
         type: userPassword
-    - id: id6
-      url: https://github.com/<your-organization-or-username>/<your-repository6-name>.git
-      credential:
-        credentialId: cred6
-    credentials:
-    - credentialId: cred1
-      user: bob
-      password: fake
-      type: userPassword
-    - credentialId: cred6
-      appId: <your-github-app-id>
-      type: githubAppKey
-      privateKey: |
-        -----BEGIN PRIVATE KEY-----
-        key-content
-        -----END PRIVATE KEY-----
+EOF
 
 
