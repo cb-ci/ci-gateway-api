@@ -1,5 +1,5 @@
 jenkins:
-  systemMessage: "Controller configured using CloudBees CasC v1"
+  systemMessage: "Controller configured using CloudBees CasC v2"
   numExecutors: 0
 unclassified:
   bundleUpdateTiming:
@@ -8,3 +8,6 @@ unclassified:
     rejectWarnings: false
     reloadAlwaysOnRestart: true
     skipNewVersions: false
+  cascItemsConfiguration:
+    variableInterpolationEnabledForAdmin: true
+    variableInterpolationEnabledForNonAdmin: true
