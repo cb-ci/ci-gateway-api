@@ -1,6 +1,6 @@
 jenkins:
-  systemMessage: "Controller configured using CloudBees CasC v1"
-   numExecutors: A
+  systemMessage: "Controller configured using CloudBees CasC v2"
+  numExecutors: 0
 unclassified:
   bundleUpdateTiming:
     automaticReload: true
