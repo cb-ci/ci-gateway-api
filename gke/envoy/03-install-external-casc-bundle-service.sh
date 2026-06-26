@@ -44,6 +44,8 @@ data:
   GATEWAY_PORT: "443"
   CASC_SCM_BRANCH: "${CASC_SCM_BRANCH}"
   CASC_SCM_REPO: "${CASC_SCM_REPO}"
+  CASC_GITHUB_APP_ID: "${CASC_GITHUB_APP_ID}"
+  CASC_GITHUB_APP_KEY: "${CASC_GITHUB_APP_KEY}"
   CONTROLLER_STORAGE_CLASS: "${CLOUDBEES_STORAGE_CLASS}"  
 EOF
 
@@ -88,10 +90,11 @@ helm upgrade --install cloudbees-core-envoy cloudbees/cloudbees-core \
   --set CascBundleService.enabled=true \
   --set CassBundleService.createConfig=true \
   --set CascBundleService.pollingSchedule=1m \
+  --set CascBundleService.javaOpts='-Dquarkus.log.category.\\"com.cloudbees\\".level=DEBUG' \
   --set Master.tokenReviewEnabled=true \
   --debug
 
-cat <<EOF | kubectl replace secret generic casc-bundle-service-config  -n ${NAMESPACE} -f - 
+cat <<EOF | kubectl replace secret generic casc-bundle-service-config -n ${NAMESPACE} -f -
 apiVersion: v1
 kind: Secret
 metadata:
@@ -102,15 +105,32 @@ type: Opaque
 stringData:
   service-configuration.yaml: |
     connectors:
-    - id: id1
+    - id: githup-app-connector
       url: ${CASC_SCM_REPO}
+      webhookSecret: "mysecret"
       branch: ${CASC_SCM_BRANCH}
       path: ${CASC_SCM_BUNDLE_PATH}/controller-base
-      type: scm
       credential:
-        user: ${CASC_SCM_USERNAME}
-        password: ${CASC_SCM_PASSWORD}
-        type: userPassword
+        credentialId: github-app-cred
+        type: reference
+    credentials:
+      - credentialId: github-app-cred
+        type: githubAppKey
+        appId: ${CASC_GITHUB_APP_ID}
+        privateKey: |
+${CASC_GITHUB_APP_KEY}
 EOF
 
+    # - id: id1
+    #   url: ${CASC_SCM_REPO}
+    #   branch: ${CASC_SCM_BRANCH}
+    #   path: ${CASC_SCM_BUNDLE_PATH}/controller-base
+    #   type: scm
+    #   credential:
+    #     user: ${CASC_SCM_USERNAME}
+    #     password: ${CASC_SCM_PASSWORD}
+    #     type: userPassword
 
+kubectl rollout restart deployment casc-bundle-service -n ${NAMESPACE}
+
+# #$(cat ../../githubAppPrivkey.pem | sed 's/^/          /')

@@ -30,7 +30,7 @@ items:
         startupInitialDelaySeconds: 30
         javaOptions: -XshowSettings:vm -XX:+AlwaysPreTouch -XX:+DisableExplicitGC -XX:+ParallelRefProcEnabled -XX:+UseStringDeduplication -XX:+AlwaysActAsServerClassMachine -Dhudson.slaves.NodeProvisioner.initialDelay=0 -XX:-OmitStackTraceInFastThrow
     description: ''
-    displayName: controller1
+    displayName: controller1-external-casc-service
     properties:
       - customWebhookData: {}
       - sharedHeaderLabelOptIn:
@@ -44,5 +44,6 @@ items:
           allowExceptions: false
       - sharedConfigurationOptOut:
           optOut: false
+      # base64 encoded "githup-app-connector:controller" -> see gitbub-app-connector in  casc-bundle-service-config k8s secret
       - configurationAsCode:
-          bundle: ${CASC_SCM_BRANCH}/controller-base
+          cascBundleServiceBundle: Z2l0aHVwLWFwcC1jb25uZWN0b3I6Y29udHJvbGxlcg==
