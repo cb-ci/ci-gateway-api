@@ -3,7 +3,7 @@ removeStrategy:
   items: NONE
 items:
   - kind: managedController
-    name: controller1
+    name: controller2
     configuration:
       kubernetes:
         allowExternalAgents: false
@@ -24,13 +24,13 @@ items:
         disk: 50
         readinessFailureThreshold: 3
         livenessTimeoutSeconds: 10
-        domain: controller1
+        domain: controller2
         livenessPeriodSeconds: 10
         startupTimeoutSeconds: 5
         startupInitialDelaySeconds: 30
         javaOptions: -XshowSettings:vm -XX:+AlwaysPreTouch -XX:+DisableExplicitGC -XX:+ParallelRefProcEnabled -XX:+UseStringDeduplication -XX:+AlwaysActAsServerClassMachine -Dhudson.slaves.NodeProvisioner.initialDelay=0 -XX:-OmitStackTraceInFastThrow
     description: ''
-    displayName: controller1-external-casc-service
+    displayName: controller2-external-casc-service
     properties:
       - customWebhookData: {}
       - sharedHeaderLabelOptIn:
