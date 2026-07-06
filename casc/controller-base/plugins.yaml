@@ -28,6 +28,7 @@ plugins:
 - id: cloudbees-folders-plus
 - id: cloudbees-github-reporting
 - id: cloudbees-groovy-view
+- id: cloudbees-hashicorp-vault
 - id: cloudbees-jenkins-advisor
 - id: cloudbees-license
 - id: cloudbees-license-tracker
