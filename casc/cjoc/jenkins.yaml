@@ -1,5 +1,5 @@
 jenkins:
-  systemMessage: "Configured by CasC Bundle v3"
+  systemMessage: "Configured by CasC Bundle v1"
   # https://$(HOSTNAME}/cjoc/manage/configureSecurity/, Security -> Authorization
   # enable rbac https://docs.cloudbees.com/docs/cloudbees-ci/latest/casc-commons/rbac
   authorizationStrategy: "cloudBeesRoleBasedAccessControl"
