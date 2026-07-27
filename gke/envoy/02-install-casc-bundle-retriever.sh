@@ -48,6 +48,7 @@ data:
 EOF
 
 echo "Deploying CloudBees CI via Helm..."
+helm repo update
 helm upgrade --install cloudbees-core-envoy cloudbees/cloudbees-core \
   --namespace "${NAMESPACE}" \
   --set Gateway.Enabled=true \

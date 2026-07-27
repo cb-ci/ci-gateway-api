@@ -30,6 +30,7 @@ validate_vars \
 check_command gcloud
 check_command kubectl
 
+gcloud auth login
 # Derive authenticated account details
 ACCOUNT="$(gcloud config get-value account 2>/dev/null)"
 if [[ -z "${ACCOUNT}" ]]; then
