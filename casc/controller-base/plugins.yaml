@@ -20,6 +20,7 @@ plugins:
   - id: cloudbees-ssh-slaves # cap src
   - id: cloudbees-view-creation-filter # cap src
   - id: cloudbees-workflow-template # cap src
+  - id: cloudbees-hashicorp-vault # cap src
   - id: config-file-provider # cap src
   - id: email-ext # cap src
   - id: github-branch-source # cap src
