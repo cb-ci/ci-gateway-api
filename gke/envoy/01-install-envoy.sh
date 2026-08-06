@@ -45,20 +45,13 @@ log "Uninstalling Envoy Gateway ${ENVOY_GATEWAY_VERSION} via Helm..."
 kubectl patch gatewayclass eg -p '{"metadata":{"finalizers":null}}' --type=merge &>/dev/null || true
 kubectl patch gateway "${GATEWAY_NAME}" -n "${NAMESPACE}" -p '{"metadata":{"finalizers":null}}' --type=merge &>/dev/null || true
 
-helm uninstall eg -n "${ENVOY_GW_NAMESPACE}" || true
-kubectl delete ns "${ENVOY_GW_NAMESPACE}" --ignore-not-found
+helm uninstall eg -n "${ENVOY_GW_NAMESPACE}" --ignore-not-found || true
+#kubectl delete ns "${ENVOY_GW_NAMESPACE}" --ignore-not-found
 kubectl create ns "${ENVOY_GW_NAMESPACE}" 
 
-# log "Uninstalling existing Envoy Gateway CRDs..."
-helm template eg-crds oci://docker.io/envoyproxy/gateway-crds-helm \
-  --version "${ENVOY_GATEWAY_VERSION}" \
-  --set crds.gatewayAPI.enabled=true \
-  --set crds.gatewayAPI.channel=standard \
-  --set crds.envoyGateway.enabled=true \
-  | kubectl delete --ignore-not-found=true -f - || true
 
 log "Applying Envoy Gateway CRDs..."
-helm template eg-crds oci://docker.io/envoyproxy/gateway-crds-helm \
+helm upgrade --install eg-crds oci://docker.io/envoyproxy/gateway-crds-helm \
 --version "${ENVOY_GATEWAY_VERSION}" \
 --set crds.gatewayAPI.enabled=true \
 --set crds.gatewayAPI.channel=standard \
