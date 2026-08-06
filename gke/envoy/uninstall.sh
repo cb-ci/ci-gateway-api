@@ -13,7 +13,7 @@ ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 source "${ROOT_DIR}/scripts/_functions.sh"
 
 # Load environment variables
-load_env "${SCRIPT_DIR}/.env"
+load_env "${SCRIPT_DIR}/../.env"
 
 # --- Configuration ---
 NAMESPACE=${NAMESPACE:-cloudbees-envoy}

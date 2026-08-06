@@ -1,7 +1,5 @@
 #! /bin/bash
 
-set -eo pipefail
-
 set -euo pipefail
 
 # Resolve script directory
@@ -13,8 +11,7 @@ ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 source "${ROOT_DIR}/scripts/_functions.sh"
 
 # Load environment variables
-load_env "../.env"
-export KUBECONFIG="${ROOT_DIR}/../kubeconfig"
+load_env "${SCRIPT_DIR}/../.env"
 
 
 cat <<EOF | kubectl -n "${NAMESPACE}" apply -f -

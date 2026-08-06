@@ -14,29 +14,20 @@ AGIC provides a direct integration between Kubernetes ingress and Azure's manage
 
 - Access to an AKS cluster.
 - Completed authentication via [**`aks/auth.sh`**](../auth.sh).
-- Root [**`.env`**](../../.env) file configured.
+- [**`aks/.env`**](../.env) file configured (copy from `aks/.env-template`).
 
 ## Getting Started
 
-### 1. Generate SSL Certificates
+### 1. Installation
 
-If you don't have existing certificates, generate self-signed ones:
-
-```bash
-# From this directory
-../../scripts/generate-ssl-cert.sh
-```
-
-### 2. Installation
-
-Run the installation script to deploy AGIC and CloudBees CI:
+Run the installation script to deploy AGIC and CloudBees CI. It generates a self-signed SSL certificate for `CJOC_HOST_NAME` automatically — no manual certificate step needed.
 
 ```bash
 chmod +x install.sh
 ./install.sh
 ```
 
-### 3. Accessing Operations Center
+### 2. Accessing Operations Center
 
 Once the deployment is complete, retrieve the initial admin password:
 

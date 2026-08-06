@@ -73,8 +73,8 @@ cd gke/envoy/
 ## Maintenance and Standards
 
 * **Shared Functions**: All scripts utilize [`scripts/_functions.sh`](./scripts/_functions.sh) for consistent logging and validation.
-* **Environment Loading**: Scripts automatically source the root `.env` file.
-* **SSL Certificates**: Certificates are generated and stored in the project root by default.
+* **Environment Loading**: Scripts source the `.env` file from their cloud directory (`gke/.env` or `aks/.env`), not a repository-root `.env`. The `gke/google-gw` implementation additionally requires its own `gke/google-gw/.env` (copy it from `gke/google-gw/.env-template`).
+* **SSL Certificates**: Self-signed certificates are generated automatically by each `install.sh` and stored in the `ssl/` directory at the project root by default; you don't need to generate them manually first.
 
 ---
 

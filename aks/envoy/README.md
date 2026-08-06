@@ -14,35 +14,27 @@ Envoy Gateway provides a standardized way to manage ingress across different Kub
 
 - Access to an AKS cluster.
 - Completed authentication via [**`aks/auth.sh`**](../auth.sh).
-- Root [**`.env`**](../../.env) file configured.
+- [**`aks/.env`**](../.env) file configured (copy from `aks/.env-template`).
 
 ## Getting Started
 
-### 1. Generate SSL Certificates
-
-If you don't have existing certificates, generate self-signed ones:
-
-```bash
-# From this directory
-../../scripts/generate-ssl-cert.sh
-```
-
-### 2. Installation
+### 1. Installation
 
 Run the installation script. It will:
 
 1. Install **Envoy Gateway** into the `envoy-gateway-system` namespace via Helm.
-2. Create the `cloudbees-envoy` namespace and TLS secret.
-3. Apply the `GatewayClass`, `Gateway`, `HTTPRoute`, and `BackendTrafficPolicy` resources.
-4. Deploy **CloudBees CI** via Helm.
-5. Wait for the Gateway's external IP to be assigned.
+2. Generate a self-signed SSL certificate for `CJOC_HOST_NAME` (no manual step needed).
+3. Create the `cloudbees-envoy` namespace and TLS secret.
+4. Apply the `GatewayClass`, `Gateway`, `HTTPRoute`, and `BackendTrafficPolicy` resources.
+5. Deploy **CloudBees CI** via Helm.
+6. Wait for the Gateway's external IP to be assigned.
 
 ```bash
 chmod +x install.sh
 ./install.sh
 ```
 
-### 3. Accessing Operations Center
+### 2. Accessing Operations Center
 
 Once the deployment is complete, retrieve the initial admin password:
 

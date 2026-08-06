@@ -14,29 +14,26 @@ This setup provides high-performance, managed load balancing that integrates dir
 
 - Access to a GKE cluster with Gateway API enabled.
 - Completed authentication via [**`gke/auth.sh`**](../auth.sh).
-- Root [**`.env`**](../../.env) file configured.
+- This directory's own [**`.env`**](./.env) file configured — copy it from `.env-template` (separate from `gke/.env`, which `gke/auth.sh` uses):
+
+```bash
+cd gke/google-gw
+cp .env-template .env
+# Edit .env with your specific details
+```
 
 ## Getting Started
 
-### 1. Generate SSL Certificates
+### 1. Installation
 
-If you don't have existing certificates, generate self-signed ones:
-
-```bash
-# From this directory
-../../scripts/generate-ssl-cert.sh
-```
-
-### 2. Installation
-
-Run the installation script to configure networking and deploy CloudBees CI:
+Run the installation script to configure networking and deploy CloudBees CI. It generates a self-signed SSL certificate for `CJOC_HOST_NAME` automatically — no manual certificate step needed.
 
 ```bash
 chmod +x install.sh
 ./install.sh
 ```
 
-### 3. Verification
+### 2. Verification
 
 Retrieve the initial admin password and visit the URL provided at the end of the installation script:
 
@@ -66,9 +63,9 @@ If you encounter a 503 "no healthy upstream" error shortly after installation, i
 curl -v -L -k  https://gateway.acaternberg.flow-training.beescloud.com/cjoc/whoAmI/api/json
 # Requires controller "ha" to be created before running these commands
 curl -v -L -k https://gateway.acaternberg.flow-training.beescloud.com/ha/whoAmI/api/json
-curl -c cokkie.txt  -v -L -k https://gateway.acaternberg.flow-training.beescloud.com/ha/whoAmI/api/json
-curl -b cokkie.txt  -v -L -k https://gateway.acaternberg.flow-training.beescloud.com/ha/whoAmI/api/json
-curl -c cokkie1.txt  -b cokkie.txt  -v -L -k https://gateway.acaternberg.flow-training.beescloud.com/ha/whoAmI/api/json
+curl -c cookie.txt  -v -L -k https://gateway.acaternberg.flow-training.beescloud.com/ha/whoAmI/api/json
+curl -b cookie.txt  -v -L -k https://gateway.acaternberg.flow-training.beescloud.com/ha/whoAmI/api/json
+curl -c cookie1.txt  -b cookie.txt  -v -L -k https://gateway.acaternberg.flow-training.beescloud.com/ha/whoAmI/api/json
 ```
 
 ## Reference Documentation

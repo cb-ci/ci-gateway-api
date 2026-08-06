@@ -41,10 +41,12 @@ else
     log "CloudBees CI Helm release not found or already deleted."
 fi
 
-# 3. Uninstall Envoy Gateway
+# 3. Envoy Gateway is intentionally left installed — it's shared, reusable
+#    infrastructure across pre-flight test runs (install.sh only installs it
+#    when not already present). Uninstall manually if you need a full teardown:
+#    helm uninstall eg -n "${ENVOY_GW_NAMESPACE}"
 if helm status eg -n "${ENVOY_GW_NAMESPACE}" &>/dev/null; then
-    log "Uninstalling Envoy Gateway Helm release..."
-    #helm uninstall eg -n "${ENVOY_GW_NAMESPACE}"
+    log "Envoy Gateway Helm release preserved for reuse by future pre-flight test runs."
 else
     log "Envoy Gateway Helm release not found or already deleted."
 fi

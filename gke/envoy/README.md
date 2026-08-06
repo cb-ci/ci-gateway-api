@@ -14,29 +14,27 @@ By using Envoy Gateway, you can use the same Gateway API resources (Gateway, HTT
 
 - Access to a GKE cluster.
 - Completed authentication via [**`gke/auth.sh`**](../auth.sh).
-- Root [**`.env`**](../../.env) file configured.
+- [**`gke/.env`**](../.env) file configured (copy from `gke/.env-template`).
 
 ## Getting Started
 
-### 1. Generate SSL Certificates
+### 1. Installation
 
-If you don't have existing certificates, generate self-signed ones:
-
-```bash
-# From this directory
-../../scripts/generate-ssl-cert.sh
-```
-
-### 2. Installation
-
-Run the installation script to deploy Envoy Gateway and CloudBees CI:
+Run the installation script to deploy Envoy Gateway and CloudBees CI. It generates a self-signed SSL certificate for `CJOC_HOST_NAME` automatically as part of the run — you don't need to generate one manually first.
 
 ```bash
 chmod +x 01-install-envoy.sh
 ./01-install-envoy.sh
 ```
 
-### 3. Verification
+If you want to pre-generate or inspect the certificate yourself, you can still run:
+
+```bash
+# From this directory
+../../scripts/generate-ssl-cert.sh "$CJOC_HOST_NAME"
+```
+
+### 2. Verification
 
 Retrieve the initial admin password and visit the URL provided at the end of the installation script:
 

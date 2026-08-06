@@ -22,23 +22,23 @@ do
   COOKIE="cookies.txt"
   # save the cookie : -c cookies.txt
   # send the coolie: -b cookies.txtcd 
-	curl --connect-timeout  $CONNECT_TIMEOUT \
-	  -s -IL -o $RESPONSEHEADERS  \
-	 -c $COOKIE \
-	 -b $COOKIE \
+	curl --connect-timeout  "$CONNECT_TIMEOUT" \
+	  -s -IL -o "$RESPONSEHEADERS"  \
+	 -c "$COOKIE" \
+	 -b "$COOKIE" \
 	 -X GET \
 	 "$CONTROLLER_URL/whoAmI/api/json?tree=authenticated"
   #curl -u $JENKINS_USER_TOKEN  -IL $CONTROLLER_URL/api/json?pretty=true
 
   # check if we got a healthy HTTP response state in the response header
   # Response header gets written by each loop/request in the $RESPONSEHEADERS (heade) file
-  if [ -z "$(cat $RESPONSEHEADERS |grep -oE 'HTTP/2 201|HTTP/ 200|HTTP/1.1 201|HTTP/2 200')" ]
+  if [ -z "$(grep -oE 'HTTP/2 201|HTTP/1.1 200|HTTP/1.1 201|HTTP/2 200' "$RESPONSEHEADERS")" ]
   then
-      echo "HTTP state is not healthy:  $(cat $RESPONSEHEADERS |grep 'HTTP/') "
+      echo "HTTP state is not healthy:  $(grep 'HTTP/' "$RESPONSEHEADERS") "
       exit 1
 	else
 	    # read the wanted information like replica host and ip address in variables
-      cat $RESPONSEHEADERS && cat $COOKIE
+      cat "$RESPONSEHEADERS" && cat "$COOKIE"
 	fi
 	sleep $CONNECT_TIMEOUT
 done

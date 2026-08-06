@@ -31,6 +31,14 @@ cd envoy/      # For Envoy Gateway
 cd google-gw/  # For GCP Native Gateway
 ```
 
+`google-gw/` reads its own `.env` (separate from the one at `gke/.env`), so if you're using that implementation, set it up first:
+
+```bash
+cd google-gw/
+cp .env-template .env
+# Edit .env with your specific details
+```
+
 ### 3. Deployment
 Run the installation script. It will handle CRD management, namespace creation, TLS secrets, and the CloudBees CI Helm chart.
 

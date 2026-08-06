@@ -14,8 +14,8 @@ source "${SCRIPT_DIR}/_functions.sh"
 load_env "${ROOT_DIR}/.env"
 
 SSL_DIR="${ROOT_DIR}/ssl"
-mkdir -p $SSL_DIR
-cd $SSL_DIR
+mkdir -p "${SSL_DIR}"
+cd "${SSL_DIR}"
 CERT_FILE="server.crt"
 KEY_FILE="server.key"
 STORE_PW="changeit"
