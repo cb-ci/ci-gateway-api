@@ -8,3 +8,4 @@ gateway-helm
 gke_gcloud_auth_plugin_cache
 cloudbees-core
 githubAppPrivkey.pem
+**/tmp

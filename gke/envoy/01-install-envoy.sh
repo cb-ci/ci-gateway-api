@@ -47,20 +47,20 @@ kubectl patch gatewayclass eg -p '{"metadata":{"finalizers":null}}' --type=merge
 kubectl patch gateway "${GATEWAY_NAME}" -n "${NAMESPACE}" -p '{"metadata":{"finalizers":null}}' --type=merge &>/dev/null || true
 
 helm uninstall eg -n "${ENVOY_GW_NAMESPACE}" || true
-#kubectl delete ns "${ENVOY_GW_NAMESPACE}" --ignore-not-found
+kubectl delete ns "${ENVOY_GW_NAMESPACE}" --ignore-not-found
 kubectl create ns "${ENVOY_GW_NAMESPACE}" || true
 
 helm uninstall eg-crds -n "${ENVOY_GW_NAMESPACE}" || true
 log "Applying Envoy Gateway CRDs..."
-# Use `helm template` (not `helm install`) so this is a plain render: CRDs may already
-# exist in-cluster without Helm ownership metadata, and `helm install` refuses to adopt
-# those. `kubectl apply --server-side --force-conflicts` takes ownership regardless.
+mkdir -p tmp/eg-crds
 helm template -n "${ENVOY_GW_NAMESPACE}" eg-crds oci://docker.io/envoyproxy/gateway-crds-helm \
 --version "${ENVOY_GATEWAY_VERSION}" \
 --set crds.gatewayAPI.enabled=true \
 --set crds.gatewayAPI.channel=standard \
---set crds.envoyGateway.enabled=true \
-| kubectl apply --server-side --force-conflicts -f -
+--set crds.envoyGateway.enabled=true > tmp/eg-crds/crds.yaml
+
+kubectl apply -f tmp/eg-crds/crds.yaml  --server-side --force-conflicts 
+
 
 log "Installing Envoy Gateway ${ENVOY_GATEWAY_VERSION} via Helm..."
 

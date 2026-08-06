@@ -10,9 +10,6 @@ current_dir="$(pwd)"
 # shellcheck source=/dev/null
 source "${SCRIPT_DIR}/_functions.sh"
 
-# Load environment variables
-load_env "${ROOT_DIR}/.env"
-
 SSL_DIR="${ROOT_DIR}/ssl"
 mkdir -p "${SSL_DIR}"
 cd "${SSL_DIR}"
