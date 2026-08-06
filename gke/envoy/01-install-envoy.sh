@@ -3,6 +3,7 @@
 # install.sh — Install Envoy Gateway and CloudBees CI on GKE.
 # -----------------------------------------------------------------------------
 set -euo pipefail
+set -x
 
 # Resolve script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -47,10 +48,10 @@ kubectl patch gatewayclass eg -p '{"metadata":{"finalizers":null}}' --type=merge
 kubectl patch gateway "${GATEWAY_NAME}" -n "${NAMESPACE}" -p '{"metadata":{"finalizers":null}}' --type=merge &>/dev/null || true
 
 helm uninstall eg -n "${ENVOY_GW_NAMESPACE}" || true
-kubectl delete ns "${ENVOY_GW_NAMESPACE}" --ignore-not-found
+kubectl delete ns "${ENVOY_GW_NAMESPACE}" --ignore-not-found || true
 kubectl create ns "${ENVOY_GW_NAMESPACE}" || true
 
-helm uninstall eg-crds -n "${ENVOY_GW_NAMESPACE}" || true
+helm uninstall eg-crds -n "${ENVOY_GW_NAMESPACE}" --ignore-not-found || true
 log "Applying Envoy Gateway CRDs..."
 mkdir -p tmp/eg-crds
 helm template -n "${ENVOY_GW_NAMESPACE}" eg-crds oci://docker.io/envoyproxy/gateway-crds-helm \
@@ -76,6 +77,8 @@ kubectl rollout status deployment/envoy-gateway -n "${ENVOY_GW_NAMESPACE}" --tim
 
 # --- Create Kubernetes Namespace for CJOC---
 log "Configuring namespace ${NAMESPACE}..."
+helm uninstall cloudbees-core-envoy || true
+kubectl delete ns "${NAMESPACE}" --ignore-not-found || true
 kubectl create namespace "${NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f -
 kubectl label namespace "${NAMESPACE}" cloudbees.com/gateway-routes=enabled --overwrite
 
