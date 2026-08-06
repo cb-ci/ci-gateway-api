@@ -2,8 +2,6 @@
 # -----------------------------------------------------------------------------
 # install.sh — Install Envoy Gateway and CloudBees CI on GKE.
 # -----------------------------------------------------------------------------
-set -eo pipefail
-
 set -euo pipefail
 
 # Resolve script directory
@@ -15,7 +13,10 @@ ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 source "${ROOT_DIR}/scripts/_functions.sh"
 
 # Load environment variables
-load_env "../.env"
+load_env "${SCRIPT_DIR}/../.env"
+
+# Validate required environment variables
+validate_vars CLUSTER_NAME ZONE NAMESPACE CERT_NAME CJOC_HOST_NAME CLOUDBEES_STORAGE_CLASS
 
 # --- Configuration ---
 ENVOY_GATEWAY_VERSION=${ENVOY_GATEWAY_VERSION:-latest}
@@ -45,13 +46,16 @@ log "Uninstalling Envoy Gateway ${ENVOY_GATEWAY_VERSION} via Helm..."
 kubectl patch gatewayclass eg -p '{"metadata":{"finalizers":null}}' --type=merge &>/dev/null || true
 kubectl patch gateway "${GATEWAY_NAME}" -n "${NAMESPACE}" -p '{"metadata":{"finalizers":null}}' --type=merge &>/dev/null || true
 
-helm uninstall eg -n "${ENVOY_GW_NAMESPACE}" --ignore-not-found || true
+helm uninstall eg -n "${ENVOY_GW_NAMESPACE}" || true
 #kubectl delete ns "${ENVOY_GW_NAMESPACE}" --ignore-not-found
 kubectl create ns "${ENVOY_GW_NAMESPACE}" || true
 
-
+helm uninstall eg-crds -n "${ENVOY_GW_NAMESPACE}" || true
 log "Applying Envoy Gateway CRDs..."
-helm upgrade --install eg-crds oci://docker.io/envoyproxy/gateway-crds-helm \
+# Use `helm template` (not `helm install`) so this is a plain render: CRDs may already
+# exist in-cluster without Helm ownership metadata, and `helm install` refuses to adopt
+# those. `kubectl apply --server-side --force-conflicts` takes ownership regardless.
+helm template -n "${ENVOY_GW_NAMESPACE}" eg-crds oci://docker.io/envoyproxy/gateway-crds-helm \
 --version "${ENVOY_GATEWAY_VERSION}" \
 --set crds.gatewayAPI.enabled=true \
 --set crds.gatewayAPI.channel=standard \
@@ -73,7 +77,7 @@ kubectl rollout status deployment/envoy-gateway -n "${ENVOY_GW_NAMESPACE}" --tim
 # --- Create Kubernetes Namespace for CJOC---
 log "Configuring namespace ${NAMESPACE}..."
 kubectl create namespace "${NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f -
-kubectl label namespace ${NAMESPACE} cloudbees.com/gateway-routes=enabled
+kubectl label namespace "${NAMESPACE}" cloudbees.com/gateway-routes=enabled --overwrite
 
 # --- TLS Secret ---
 log "Updating TLS secret ${CERT_NAME}..."
@@ -99,7 +103,7 @@ EOF
  
 
 log "Applying Gateway..."
-kubectl delete gateway ${GATEWAY_NAME} -n ${NAMESPACE} --ignore-not-found
+kubectl delete gateway "${GATEWAY_NAME}" -n "${NAMESPACE}" --ignore-not-found
 cat <<EOF | kubectl apply -f -
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
@@ -178,7 +182,7 @@ while [[ -z "$GATEWAY_IP" && $RETRY_COUNT -lt $MAX_RETRIES ]]; do
     if [[ -z "$GATEWAY_IP" ]]; then
         echo -n "."
         sleep 10
-        ((RETRY_COUNT++))
+        RETRY_COUNT=$((RETRY_COUNT + 1))
     fi
 done
 
