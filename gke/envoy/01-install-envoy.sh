@@ -47,7 +47,7 @@ kubectl patch gateway "${GATEWAY_NAME}" -n "${NAMESPACE}" -p '{"metadata":{"fina
 
 helm uninstall eg -n "${ENVOY_GW_NAMESPACE}" --ignore-not-found || true
 #kubectl delete ns "${ENVOY_GW_NAMESPACE}" --ignore-not-found
-kubectl create ns "${ENVOY_GW_NAMESPACE}" 
+kubectl create ns "${ENVOY_GW_NAMESPACE}" || true
 
 
 log "Applying Envoy Gateway CRDs..."
