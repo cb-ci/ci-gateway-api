@@ -132,5 +132,3 @@ EOF
     #     type: userPassword
 
 kubectl rollout restart deployment casc-bundle-service -n ${NAMESPACE}
-
-# #$(cat ../../githubAppPrivkey.pem | sed 's/^/          /')

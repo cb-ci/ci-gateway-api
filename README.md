@@ -35,6 +35,13 @@ Follow these steps for a consistent deployment experience:
 Copy the environment template and configure your global variables (Domain, Cloud Project IDs, etc.):
 
 ```bash
+# For GKE
+cd gke
+cp .env-template .env
+# Edit .env with your specific details
+
+# For AKS
+cd aks
 cp .env-template .env
 # Edit .env with your specific details
 ```
@@ -60,7 +67,7 @@ Navigate to the specific implementation directory and run the installation:
 ```bash
 # Example: GKE with Envoy Gateway
 cd gke/envoy/
-./install.sh
+./01-install-envoy.sh
 ```
 
 ## Maintenance and Standards

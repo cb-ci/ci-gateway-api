@@ -6,9 +6,14 @@ set -euo pipefail
 
 # Resolve script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+
+# Source common functions
+# shellcheck source=/dev/null
+source "${ROOT_DIR}/scripts/_functions.sh"
+
 # Load environment variables
-source "${ROOT_DIR}/../.env"
+load_env "../.env"
 export KUBECONFIG="${ROOT_DIR}/../kubeconfig"
 
 

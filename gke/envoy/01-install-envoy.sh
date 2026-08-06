@@ -8,18 +8,19 @@ set -euo pipefail
 
 # Resolve script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 # Source common functions
 # shellcheck source=/dev/null
 source "${ROOT_DIR}/scripts/_functions.sh"
 
 # Load environment variables
-load_env "${ROOT_DIR}/.env"
+load_env "../.env"
 
 # --- Configuration ---
 ENVOY_GATEWAY_VERSION=${ENVOY_GATEWAY_VERSION:-latest}
 ENVOY_GW_NAMESPACE=envoy-gateway-system
+GATEWAY_NAME=eg
 
 CERT_DIR="${ROOT_DIR}/ssl"
 #CERT_DIR="${ROOT_DIR}"
@@ -86,7 +87,6 @@ log "Updating TLS secret ${CERT_NAME}..."
 "${ROOT_DIR}/scripts/generate-ssl-cert.sh" "${CJOC_HOST_NAME}"
 
 kubectl delete secret "${CERT_NAME}" -n "${NAMESPACE}" --ignore-not-found
-#kubectl create secret tls "${CERT_NAME}" --key $CERT_DIR/privkey.pem --cert $CERT_DIR/fullchain.pem --namespace=$NAMESPACE
 kubectl create secret tls "${CERT_NAME}" \
   --cert="${CERT_DIR}/jenkins.pem" \
   --key="${CERT_DIR}/server.key" \

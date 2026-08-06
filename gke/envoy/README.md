@@ -32,8 +32,8 @@ If you don't have existing certificates, generate self-signed ones:
 Run the installation script to deploy Envoy Gateway and CloudBees CI:
 
 ```bash
-chmod +x install.sh
-./install.sh
+chmod +x 01-install-envoy.sh
+./01-install-envoy.sh
 ```
 
 ### 3. Verification
