@@ -14,7 +14,7 @@ ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 source "${ROOT_DIR}/scripts/_functions.sh"
 
 # Load environment variables
-load_env "${ROOT_DIR}/.env"
+load_env "${SCRIPT_DIR}/.env"
 
 # Validate required variables
 validate_vars \
