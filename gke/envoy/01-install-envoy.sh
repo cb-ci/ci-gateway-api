@@ -17,12 +17,11 @@ source "${ROOT_DIR}/scripts/_functions.sh"
 load_env "${SCRIPT_DIR}/../.env"
 
 # Validate required environment variables
-validate_vars CLUSTER_NAME ZONE NAMESPACE CERT_NAME CJOC_HOST_NAME CLOUDBEES_STORAGE_CLASS
+validate_vars CLUSTER_NAME ZONE NAMESPACE CERT_NAME CJOC_HOST_NAME CLOUDBEES_STORAGE_CLASS GATEWAY_NAME
 
 # --- Configuration ---
 ENVOY_GATEWAY_VERSION=${ENVOY_GATEWAY_VERSION:-latest}
 ENVOY_GW_NAMESPACE=envoy-gateway-system
-GATEWAY_NAME=eg
 
 CERT_DIR="${ROOT_DIR}/ssl"
 #CERT_DIR="${ROOT_DIR}"
@@ -99,7 +98,7 @@ cat <<EOF | kubectl apply -f -
 apiVersion: gateway.networking.k8s.io/v1
 kind: GatewayClass
 metadata:
-  name: eg
+  name: ${GATEWAY_NAME}
 spec:
   controllerName: gateway.envoyproxy.io/gatewayclass-controller
 EOF

@@ -44,5 +44,6 @@ items:
           allowExceptions: false
       - sharedConfigurationOptOut:
           optOut: false
+      # this requires the ./02-install-casc-bundle-retriever.sh to be run first
       - configurationAsCode:
           bundle: ${CASC_SCM_BRANCH}/controller-base

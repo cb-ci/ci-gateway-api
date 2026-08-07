@@ -45,5 +45,6 @@ items:
       - sharedConfigurationOptOut:
           optOut: false
       # base64 encoded "githup-app-connector:controller" -> see gitbub-app-connector in  casc-bundle-service-config k8s secret
+      # this requires ./03-install-external-casc-bundle-service.sh to be run first
       - configurationAsCode:
           cascBundleServiceBundle: Z2l0aHVwLWFwcC1jb25uZWN0b3I6Y29udHJvbGxlcg==
