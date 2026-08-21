@@ -85,9 +85,9 @@ helm upgrade --install cloudbees-core-envoy cloudbees/cloudbees-core \
   --set OperationsCenter.ExtraVolumeMounts[0].mountPath="/var/run/secrets/cjoc" \
   --set OperationsCenter.ExtraVolumeMounts[0].readOnly=true \
   --set CascBundleService.enabled=true \
-  --set CassBundleService.createConfig=true \
+  --set CascBundleService.createConfig=true \
   --set CascBundleService.pollingSchedule=1m \
-  --set CascBundleService.javaOpts='-Dquarkus.log.category.\\"com.cloudbees\\".level=DEBUG' \
+  --set CascBundleService.javaOpts='-Dquarkus.log.category."com.cloudbees".level=DEBUG' \
   --set Master.tokenReviewEnabled=true \
   --debug
 
