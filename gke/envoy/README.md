@@ -100,6 +100,111 @@ curl -c cookie.txt -v -L -k https://gateway-envoy.acaternberg.flow-training.bees
 curl -b cookie.txt -v -L -k https://gateway-envoy.acaternberg.flow-training.beescloud.com/ha/whoAmI/api/json
 ```
 
+### Get Bundle Link Secret/URL
+
+```
+kubectl get secret controller2-corecasc-bundle-link -n cloudbees-envoy \
+  -o jsonpath='{.data.bundle-link\.yaml}' | base64 -d; echo
+```
+
+```
+ kubectl get secret casc-bundle-service-config -n cloudbees-envoy \
+  -o jsonpath='{.data.service-configuration\.yaml}' | base64 -d; echo
+```
+
+### CasC Bundle Service Endpoints
+
+**Get all bundle references:**
+
+```
+kubectl exec -c jenkins cjoc-0 -- sh -c 'curl -sH "Authorization: Bearer `cat /var/run/secrets/tokens/casc-bundle-service`" http://casc-bundle-service/casc-bundle-service/api/v1/bundles/all' | jq
+
+kubectl exec -c jenkins cjoc-0 -- sh -c 'curl -sH "Authorization: Bearer `cat /var/run/secrets/tokens/casc-bundle-service`" http://casc-bundle-service/casc-bundle-service/api/v1/bundles/all' \
+  | jq -r '.[].bundleReference' | base64 -d; echo
+
+kubectl exec -c jenkins cjoc-0 -- sh -c 'curl -sH "Authorization: Bearer `cat /var/run/secrets/tokens/casc-bundle-service`" http://casc-bundle-service/casc-bundle-service/api/v1/bundles/all' \
+  | jq 'map(. + {decodedReference: (.bundleReference | @base64d)})'  
+
+```
+
+**Get metrics:**
+
+```
+kubectl exec -c jenkins cjoc-0 -- sh -c 'curl -sH "Authorization: Bearer `cat /var/run/secrets/tokens/casc-bundle-service`" http://casc-bundle-service/casc-bundle-service/api/v1/metrics' | jq 
+```
+
+**download bundle***
+
+```
+kubectl exec -c jenkins cjoc-0 -- sh -c 'curl -sH "Authorization: Bearer `cat /var/run/secrets/tokens/casc-bundle-service`" http://casc-bundle-service/casc-bundle-service/api/v1/bundles/download/zip-bundle?version' \
+  | tee controller2-corecasc-bundle.zip | head -n 10
+```
+
+**Bundle endpoints — `BundlesEndpoint.java`, base path `api/v1`**
+
+| Method | Path | Auth | Parameters |
+| -------- | ------ | ------ | ------------ |
+| GET | `/api/v1/bundles/download/zip-bundle` | Required | Query (optional): `version` — if present (any value), returns bundle version as `text/plain` instead of the zip. Implicit: caller's Service Account (from bearer token) resolves which bundle to return via `bundleReferenceManagement.getBundleReference(principal.getName())` — no explicit bundle ID param; it's tied to who's calling. Response: zip binary (`application/octet-stream`) with `Content-Disposition: attachment`. |
+| GET | `/api/v1/bundles/all` | Required | None. Returns JSON array of `BundleYamlDTO` for all bundles (including duplicates), sorted by description. |
+| GET | `/api/v1/bundles/duplicates` | Required | None. Returns JSON array of `BundleYamlDTO` for bundles with duplicate IDs (omits the first occurrence of each). |
+| GET | `/api/v1/bundles` | Required | None. Returns JSON array of `BundleYamlDTO`, de-duplicated by bundle ID (first occurrence kept). |
+
+#### Metrics — `MetricsEndpoint.java`
+
+| Method | Path | Auth | Parameters |
+|--------|------|------|------------|
+| GET | `/api/v1/metrics` | Required | None. Returns `MetricsDTO` as JSON. |
+
+#### Webhook endpoints (no `@Authenticated` — instead use per-provider signature/secret validation)
+
+| Method | Path | Content-Type | Required headers | Body |
+| -------- | ------ | -------------- | ------------------ | ------ |
+| POST | `/api/v1/github-webhook` | `application/x-www-form-urlencoded` | `X-GitHub-Event` (push or pull_request), `X-Hub-Signature-256` (HMAC signature) | Form param `payload` (JSON string) — 400/error if empty |
+| POST | `/api/v1/github-webhook` | `application/json` | Same as above | Raw JSON GitHub event payload |
+| POST | `/api/v1/gitlab-webhook` | `application/json` | `X-Gitlab-Event` (must be Push Hook), `X-Gitlab-Token` (shared secret) | JSON body deserialized to GitlabEvent |
+| POST | `/api/v1/bitbucket-webhook` | `application/json` | `X-Event-Key` (must be repo:push), `X-Hub-Signature-256` (HMAC signature) | Raw JSON payload deserialized to BitbucketEvent |
+
+**Notes:**
+
+- Only `push` and `pull_request` (actions `opened`/`synchronize`) event types are processed for GitHub; anything else returns 200 OK with "Event was not processed" and is a no-op.
+- All three return a `RetrieverResponse` — `ok(message)` or `fail(exception)` — and process the actual retrieval asynchronously (fire-and-forget to an executor), so the HTTP response doesn't reflect validation outcome (as discussed earlier).
+
+#### Health probes (MicroProfile Health — Quarkus default paths, no custom `@Path`)
+
+| Method | Path | Auth | Parameters |
+|--------|------|------|------------|
+| GET | `/q/health/live` | None | None — always returns UP. |
+| GET | `/q/health/ready` | None | None — UP once AppLifecycleBean startup has completed, else DOWN. |
+
+---
+
+## Calculate Bundle version sha1
+
+```bash
+#!/bin/bash
+
+set -e
+
+folder="${1:?usage: $0 <bundle-folder>}"
+tmp=$(mktemp)
+trap 'rm -f "$tmp"' EXIT
+
+# Same ordering as Files.walk(folder).sorted(), .git excluded
+find "$folder" -type f -not -path '*/.git/*' | sort | while IFS= read -r f; do
+    if [[ "$(basename "$f")" == "bundle.yaml" ]]; then
+        # remove the version: key before hashing (mirrors removeVersionAttribute)
+        grep -v '^version:[[:space:]]*' "$f" >> "$tmp"
+    else
+        cat "$f" >> "$tmp"
+    fi
+done
+
+sha1sum "$tmp" | awk '{print $1}'
+
+```
+
+---
+
 ## Reference Documentation
 
 | Topic | Documentation Link |
