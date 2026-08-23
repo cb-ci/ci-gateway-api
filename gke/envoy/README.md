@@ -69,16 +69,16 @@ For a detailed look at the traffic flow and component relationships, see [DIAGRA
 | Proxy subnet | GCP proxy-only subnet required | **Not needed** |
 | Portability | GKE only | Any Kubernetes distribution |
 
-## Troubleshooting
+# Troubleshooting
 
-### No External IP assigned
+## No External IP assigned
 
 On GKE, the LoadBalancer service is provisioned automatically. If it's pending:
 
 - Check the service status: `kubectl get svc -n envoy-gateway-system`
 - Describe the Gateway: `kubectl describe gateway -n cloudbees-envoy`
 
-### 503 / No Healthy Upstream
+## 503 / No Healthy Upstream
 
 Active health checks are enforced by Envoy. If backends are not yet ready, Envoy will not route traffic until `healthyThreshold` is met. Check pod readiness:
 
@@ -87,34 +87,74 @@ kubectl get pods -n cloudbees-envoy
 kubectl describe backendtrafficpolicy -n cloudbees-envoy
 ```
 
-### Test with curl
+## Test with curl
 
 ```bash
-curl -v -L -k https://gateway-envoy.acaternberg.flow-training.beescloud.com/cjoc/whoAmI/api/json
-
-# Requires controller "ha" to be created first
-curl -v -L -k https://gateway-envoy.acaternberg.flow-training.beescloud.com/ha/whoAmI/api/json
-
-# Sticky session test
-curl -c cookie.txt -v -L -k https://gateway-envoy.acaternberg.flow-training.beescloud.com/ha/whoAmI/api/json
-curl -b cookie.txt -v -L -k https://gateway-envoy.acaternberg.flow-training.beescloud.com/ha/whoAmI/api/json
+curl -v -L -k https://gateway-envoy.acaternberg.flow-training.beescloud.com/cjoc/health?probe=liveness
+curl -v -L -k https://gateway-envoy.acaternberg.flow-training.beescloud.com/cjoc/health?probe=readiness
+curl -v -L -k https://gateway-envoy.acaternberg.flow-training.beescloud.com/cjoc/health?probe=startup
 ```
 
-### Get Bundle Link Secret/URL
+- Requires controller "$CONTROLLER" to be created first
+
+```bash
+curl -v -L -k https://gateway-envoy.acaternberg.flow-training.beescloud.com/${CONTROLLER}/health?probe=liveness
+curl -v -L -k https://gateway-envoy.acaternberg.flow-training.beescloud.com/${CONTROLLER}/health?probe=readiness
+curl -v -L -k https://gateway-envoy.acaternberg.flow-training.beescloud.com/${CONTROLLER}/health?probe=startup
+```
+
+- Sticky session test
+
+Note: This only works if stickysessions is enabled in envoy gateway. Its not enabled in this setup (not GA yet), so envoy beta is required
+
+```bash
+curl -c cookie.txt -v -L -k https://gateway-envoy.acaternberg.flow-training.beescloud.com/${CONTROLLER}/health?probe=readiness
+curl -b cookie.txt -v -L -k https://gateway-envoy.acaternberg.flow-training.beescloud.com/${CONTROLLER}/health?probe=readiness
+```
+
+## Get Bundle Link Secret/URL
 
 ```
 kubectl get secret controller2-corecasc-bundle-link -n cloudbees-envoy \
   -o jsonpath='{.data.bundle-link\.yaml}' | base64 -d; echo
 ```
 
+- Sample output
+
 ```
- kubectl get secret casc-bundle-service-config -n cloudbees-envoy \
+url: "<http://casc-bundle-service.cloudbees-envoy.svc.cluster.local/casc-bundle-service/api/v1/bundles/download/zip-bundle>"
+```
+
+```
+kubectl get secret casc-bundle-service-config -n cloudbees-envoy \
   -o jsonpath='{.data.service-configuration\.yaml}' | base64 -d; echo
 ```
 
-### CasC Bundle Service Endpoints
+- Sample output
 
-**Get all bundle references:**
+```
+connectors:
+- id: githup-app-connector
+  url: https://github.com/cb-ci/ci-gateway-api.git
+  webhookSecret: "mysecret"
+  branch: main
+  path: casc/controller-base
+  credential:
+    credentialId: github-app-cred
+    type: reference
+credentials:
+  - credentialId: github-app-cred
+    type: githubAppKey
+    appId: ....
+    privateKey: |
+      -----BEGIN PRIVATE KEY-----
+      ......  
+      -----END PRIVATE KEY-----
+```
+
+## CasC Bundle Service Endpoints
+
+- Get all bundle references:
 
 ```
 kubectl exec -c jenkins cjoc-0 -- sh -c 'curl -sH "Authorization: Bearer `cat /var/run/secrets/tokens/casc-bundle-service`" http://casc-bundle-service/casc-bundle-service/api/v1/bundles/all' | jq
@@ -127,17 +167,41 @@ kubectl exec -c jenkins cjoc-0 -- sh -c 'curl -sH "Authorization: Bearer `cat /v
 
 ```
 
+- Sample output
+
+```
+githup-app-connector:controller
+```
+
 **Get metrics:**
 
 ```
 kubectl exec -c jenkins cjoc-0 -- sh -c 'curl -sH "Authorization: Bearer `cat /var/run/secrets/tokens/casc-bundle-service`" http://casc-bundle-service/casc-bundle-service/api/v1/metrics' | jq 
 ```
 
+- Sample output
+
+```
+{
+  "connectorsCount": 1,
+  "controllersCount": 1,
+  "scmGithubCount": 1,
+  "scmBitBucketCount": 0,
+  "scmGitlabCount": 0,
+  "scmOtherCount": 0,
+  "protocolSshCount": 0,
+  "protocolHttpCount": 1,
+  "credentialUsernamePasswordCount": 0,
+  "credentialTokenCount": 0,
+  "credentialSshCount": 0,
+  "credentialGithubAppCount": 1
+}
+```
+
 **download bundle***
 
 ```
-kubectl exec -c jenkins cjoc-0 -- sh -c 'curl -sH "Authorization: Bearer `cat /var/run/secrets/tokens/casc-bundle-service`" http://casc-bundle-service/casc-bundle-service/api/v1/bundles/download/zip-bundle?version' \
-  | tee controller2-corecasc-bundle.zip | head -n 10
+kubectl exec -c jenkins controller2-0 -- sh -c 'curl -sH "Authorization: Bearer `cat /var/run/secrets/tokens/casc-bundle-service`" http://casc-bundle-service/casc-bundle-service/api/v1/bundles/download/zip-bundle' > test.zip 
 ```
 
 **Bundle endpoints — `BundlesEndpoint.java`, base path `api/v1`**
@@ -181,6 +245,7 @@ kubectl exec -c jenkins cjoc-0 -- sh -c 'curl -sH "Authorization: Bearer `cat /v
 ## Calculate Bundle version sha1
 
 ```bash
+cat <<'EOF' > /tmp/test.sh
 #!/bin/bash
 
 set -e
@@ -198,8 +263,10 @@ find "$folder" -type f -not -path '*/.git/*' | sort | while IFS= read -r f; do
         cat "$f" >> "$tmp"
     fi
 done
-
 sha1sum "$tmp" | awk '{print $1}'
+EOF
+
+chmod +x /tmp/test.sh
 
 ```
 
