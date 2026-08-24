@@ -42,7 +42,7 @@ Retrieve the initial admin password and visit the URL provided at the end of the
 kubectl exec -ti cjoc-0 -n cloudbees-envoy -- cat /var/jenkins_home/secrets/initialAdminPassword
 ```
 
-Visit: `https://gateway-envoy.acaternberg.flow-training.beescloud.com/cjoc`
+Visit: `https://${CJOC_HOST_NAME}/cjoc`
 
 ## Architecture
 
@@ -90,17 +90,17 @@ kubectl describe backendtrafficpolicy -n cloudbees-envoy
 ## Test with curl
 
 ```bash
-curl -v -L -k https://gateway-envoy.acaternberg.flow-training.beescloud.com/cjoc/health?probe=liveness
-curl -v -L -k https://gateway-envoy.acaternberg.flow-training.beescloud.com/cjoc/health?probe=readiness
-curl -v -L -k https://gateway-envoy.acaternberg.flow-training.beescloud.com/cjoc/health?probe=startup
+curl -v -L -k https://${CJOC_HOST_NAME}/cjoc/health?probe=liveness
+curl -v -L -k https://${CJOC_HOST_NAME}/cjoc/health?probe=readiness
+curl -v -L -k https://${CJOC_HOST_NAME}/cjoc/health?probe=startup
 ```
 
 - Requires controller "$CONTROLLER" to be created first
 
 ```bash
-curl -v -L -k https://gateway-envoy.acaternberg.flow-training.beescloud.com/${CONTROLLER}/health?probe=liveness
-curl -v -L -k https://gateway-envoy.acaternberg.flow-training.beescloud.com/${CONTROLLER}/health?probe=readiness
-curl -v -L -k https://gateway-envoy.acaternberg.flow-training.beescloud.com/${CONTROLLER}/health?probe=startup
+curl -v -L -k https://${CJOC_HOST_NAME}/${CONTROLLER}/health?probe=liveness
+curl -v -L -k https://${CJOC_HOST_NAME}/${CONTROLLER}/health?probe=readiness
+curl -v -L -k https://${CJOC_HOST_NAME}/${CONTROLLER}/health?probe=startup
 ```
 
 - Sticky session test
@@ -108,8 +108,8 @@ curl -v -L -k https://gateway-envoy.acaternberg.flow-training.beescloud.com/${CO
 Note: This only works if stickysessions is enabled in envoy gateway. Its not enabled in this setup (not GA yet), so envoy beta is required
 
 ```bash
-curl -c cookie.txt -v -L -k https://gateway-envoy.acaternberg.flow-training.beescloud.com/${CONTROLLER}/health?probe=readiness
-curl -b cookie.txt -v -L -k https://gateway-envoy.acaternberg.flow-training.beescloud.com/${CONTROLLER}/health?probe=readiness
+curl -c cookie.txt -v -L -k https://${CJOC_HOST_NAME}/${CONTROLLER}/health?probe=readiness
+curl -b cookie.txt -v -L -k https://${CJOC_HOST_NAME}/${CONTROLLER}/health?probe=readiness
 ```
 
 ## Get Bundle Link Secret/URL
@@ -202,6 +202,7 @@ kubectl exec -c jenkins cjoc-0 -- sh -c 'curl -sH "Authorization: Bearer `cat /v
 
 ```
 kubectl exec -c jenkins controller2-0 -- sh -c 'curl -sH "Authorization: Bearer `cat /var/run/secrets/tokens/casc-bundle-service`" http://casc-bundle-service/casc-bundle-service/api/v1/bundles/download/zip-bundle' > test.zip 
+
 ```
 
 **Bundle endpoints — `BundlesEndpoint.java`, base path `api/v1`**
