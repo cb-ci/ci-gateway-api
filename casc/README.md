@@ -1,9 +1,9 @@
 # Bundle validation
 
-SA=sa-admin:cloudbees_ci_sa_XXXX
-CJOC=<https://URL/cjoc/>
-CONTROLLER=<https://URL/controller1/>
-BUNDLE_ID=main/controller-base
+SA=${SA:-service-account:token}
+CJOC=${CJOC:-<http://localhost:8080/cjoc}>
+CONTROLLER=${CONTROLLER:-http://localhost:8080/controller1}
+BUNDLE_ID=${BUNDLE_ID:-main/controller-base}
 
 ## Validates raw bundles over HTTP before adding them to the operations center
 
