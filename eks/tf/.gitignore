@@ -1,0 +1,12 @@
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+crash.log
+crash.*.log
+
+# Contains the hostname and any account-specific overrides.
+*.tfvars
+!*.tfvars.example
+
+# Keep .terraform.lock.hcl committed — it pins provider versions.

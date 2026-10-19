@@ -1,0 +1,25 @@
+# Copy to terraform.tfvars and edit.
+#   cp terraform.tfvars.example terraform.tfvars
+
+# REQUIRED — no default. Public hostname for the Operations Center. The ACM
+# certificate is issued for exactly this name, and its parent zone must already
+# exist as a public Route53 hosted zone in this account.
+cjoc_host_name = "ci.example.com"
+
+# Set only if the hosted zone apex is not simply cjoc_host_name minus its first
+# label (e.g. a multi-level subdomain like ci.eks.example.com in zone
+# example.com, where stripping one label would wrongly give eks.example.com).
+# route53_zone_domain = "example.com"
+
+# region             = "us-east-1"
+# cluster_name       = "acaternberg"
+# kubernetes_version = "1.35"
+# vpc_cidr           = "10.0.0.0/16"
+# azs                = ["us-east-1a", "us-east-1b"]
+# node_az            = "us-east-1a"
+
+# tags = {
+#   cb-user        = "acaternberg"
+#   cb-owner       = "professional-services"
+#   cb-environment = "demo"
+# }

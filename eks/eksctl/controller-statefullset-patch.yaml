@@ -1,0 +1,50 @@
+# This needs to be applied under CJOC-> Manage Jenkins-> Controller Provisioning -> YAML patch for Controller to take effect
+---
+apiVersion: "apps/v1"
+kind: "StatefulSet"
+spec:
+  template:
+    metadata:
+      annotations:
+        cluster-autoscaler.kubernetes.io/safe-to-evict: "false"
+    spec:
+      tolerations:
+        - key: "workload"
+          operator: "Equal"
+          value: "controller"
+          effect: "NoSchedule"
+      nodeSelector:
+        workload: "controller"
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: "kubernetes.io/os"
+                    operator: "In"
+                    values:
+                      - "linux"
+                  - key: "workload"
+                    operator: "In"
+                    values:
+                      - "controller"
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: "com.cloudbees.cje.type"
+                      operator: "In"
+                      values:
+                        - "cjoc"
+                topologyKey: "kubernetes.io/hostname"
+              weight: 1
+            - podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: "jenkins"
+                      operator: "In"
+                      values:
+                        - "slave"
+                topologyKey: "kubernetes.io/hostname"
+              weight: 1

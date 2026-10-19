@@ -1,0 +1,47 @@
+pipeline {
+    agent {
+        kubernetes {
+            cloud 'k8s'
+            defaultContainer 'shell'
+            retries 2
+            yaml '''
+apiVersion: v1
+kind: Pod
+spec:
+  nodeSelector:
+    workload: agent
+  tolerations:
+  - key: workload
+    operator: Equal
+    value: agent
+    effect: NoSchedule
+  securityContext:
+    fsGroup: 1000
+  containers:
+  - name: shell
+    image: ubuntu
+    command:
+    - sleep
+    args:
+    - infinity
+    resources:
+      requests:
+        cpu: "500m"
+        memory: "512Mi"
+      limits:
+        cpu: "1"
+        memory: "1Gi"
+    securityContext:
+      runAsUser: 1000
+'''
+        }
+    }
+    stages {
+        stage('Main') {
+            steps {
+                sh 'hostname'
+                sleep 300
+            }
+        }
+    }
+}

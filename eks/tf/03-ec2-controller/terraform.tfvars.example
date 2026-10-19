@@ -1,0 +1,31 @@
+# Copy to terraform.tfvars and edit.
+#   cp terraform.tfvars.example terraform.tfvars
+
+# REQUIRED — no default. Public hostname for the standalone Client Controller.
+# The ACM certificate is issued for exactly this name, and its parent zone
+# must already exist as a public Route53 hosted zone in this account.
+ec2_controller_host_name = "ec2-controller.example.com"
+
+# Confirm this matches your licensed CloudBees CI Client Controller
+# image/tag before applying outside a demo.
+# controller_image = "cloudbees/cloudbees-core-cm:latest"
+
+# Set only if the hosted zone apex is not simply ec2_controller_host_name
+# minus its first label.
+# route53_zone_domain = "example.com"
+
+# Must match 02-platform's envoy_gw_namespace / the Ingress it created.
+# envoy_gw_namespace = "envoy-gateway-system"
+# ingress_name        = "cjoc-alb"
+
+# instance_type    = "t3.medium"
+# volume_size_gb   = 50
+# controller_port  = 8080
+# ssh_key_name     = ""
+# listener_rule_priority = 100
+
+# tags = {
+#   cb-user        = "acaternberg"
+#   cb-owner       = "professional-services"
+#   cb-environment = "demo"
+# }
