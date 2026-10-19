@@ -120,7 +120,7 @@ variable "remote_agent_namespace" {
     actually created — confirm with `kubectl get ns` rather than assuming.
   EOT
   type        = string
-  default     = "cbci-builds"
+  default     = "cloudbees-core-builds"
 }
 
 variable "tags" {

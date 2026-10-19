@@ -273,10 +273,11 @@ outputs: `instance_id`, `instance_private_ip` (SSM Session Manager target),
   rollbacks are non-deterministic.
 - **`namespace_cloudbees` / `gateway_name`** default to `cloudbees-core` and
   `cloudbees-gateway`. Set them to match your environment if they differ.
-- **`remote_agent_namespace`** defaults to `cbci-builds`. This is a namespace
-  the CloudBees CI chart creates itself (`Agents.SeparateNamespace`), not
-  something `namespace_cloudbees` or Terraform controls the name of — verify
-  it with `kubectl get ns` rather than trusting the default.
+- **`remote_agent_namespace`** defaults to `cloudbees-core-builds`. This is a
+  namespace the CloudBees CI chart creates itself (`Agents.SeparateNamespace`),
+  named `<namespace_cloudbees>-builds` — so change it if you change
+  `namespace_cloudbees`. Verify it with `kubectl get ns` rather than trusting
+  the default.
 - **`03-ec2-controller/variables.tf`'s `controller_image`** defaults to
   `cloudbees/cloudbees-core-cm:latest`, a placeholder. Confirm the correct
   CloudBees CI Client Controller image/tag for your licensed version before

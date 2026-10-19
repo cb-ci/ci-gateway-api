@@ -36,7 +36,7 @@ resource "kubernetes_role_v1" "remote_agent" {
 
   # The namespace comes from the CloudBees chart, so wait for it. The service
   # account already does; without this the Role raced the chart and failed
-  # with `namespaces "cbci-builds" not found`.
+  # with `namespaces "<name>" not found`.
   depends_on = [helm_release.cloudbees_ci]
 }
 
