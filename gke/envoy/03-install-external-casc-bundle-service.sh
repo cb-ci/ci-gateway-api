@@ -58,6 +58,7 @@ EOF
 #   Bundle Service then distributes controller-level bundles to managed controllers.
 # Reference: https://docs.cloudbees.com/docs/cloudbees-ci/latest/casc-controller/set-up-managed-controller-with-service
 echo "Deploying CloudBees CI with CasC Controller Bundle Service via Helm..."
+helm repo update
 helm upgrade --install cloudbees-core-envoy cloudbees/cloudbees-core \
   --namespace "${NAMESPACE}" \
   --set Gateway.Enabled=true \
