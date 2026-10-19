@@ -7,29 +7,31 @@ locals {
   # role key => { service_account, policy_arns }
   # eksctl's wellKnownPolicies were shorthand for exactly these AWS managed
   # policies; naming them explicitly makes the grant auditable in a plan.
+  # policy_arns is a map with static labels as keys: ARNs of policies created
+  # in this config are unknown until apply and cannot be for_each keys.
   irsa_roles = {
     ebs_csi = {
       service_account = "kube-system:ebs-csi-controller-sa"
-      policy_arns     = ["arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"]
+      policy_arns     = { managed = "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy" }
     }
     efs_csi = {
       service_account = "kube-system:efs-csi-controller-sa"
-      policy_arns     = ["arn:aws:iam::aws:policy/service-role/AmazonEFSCSIDriverPolicy"]
+      policy_arns     = { managed = "arn:aws:iam::aws:policy/service-role/AmazonEFSCSIDriverPolicy" }
     }
     alb_controller = {
       service_account = "kube-system:aws-load-balancer-controller"
-      policy_arns     = [aws_iam_policy.alb_controller.arn]
+      policy_arns     = { custom = aws_iam_policy.alb_controller.arn }
     }
     cluster_autoscaler = {
       service_account = "kube-system:cluster-autoscaler"
-      policy_arns     = [aws_iam_policy.cluster_autoscaler.arn]
+      policy_arns     = { custom = aws_iam_policy.cluster_autoscaler.arn }
     }
   }
 
   # Flattened role/policy pairs so a single for_each can attach all of them.
   irsa_attachments = merge([
     for key, cfg in local.irsa_roles : {
-      for arn in cfg.policy_arns : "${key}:${arn}" => { role = key, policy_arn = arn }
+      for label, arn in cfg.policy_arns : "${key}:${label}" => { role = key, policy_arn = arn }
     }
   ]...)
 }

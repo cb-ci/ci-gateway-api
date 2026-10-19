@@ -36,7 +36,8 @@ resource "aws_efs_file_system" "this" {
 # every private subnet it found, so this matches — but note that only node_az
 # actually runs compute, so the others exist purely for future expansion.
 resource "aws_efs_mount_target" "this" {
-  for_each = toset(module.vpc.private_subnets)
+  # Keyed on the (static) AZ name; only the subnet ID value is apply-time.
+  for_each = { for idx, az in var.azs : az => module.vpc.private_subnets[idx] }
 
   file_system_id  = aws_efs_file_system.this.id
   subnet_id       = each.value
