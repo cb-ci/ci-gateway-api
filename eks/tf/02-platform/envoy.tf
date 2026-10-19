@@ -6,36 +6,15 @@
 #            -> Gateway -> HTTPRoute (from the CloudBees chart) -> CJOC
 
 # --- CRDs (Gateway API standard channel + Envoy Gateway) ----------------------
-# The bash version did `helm template ... | kubectl apply --server-side`;
-# installing the CRD chart as a real release means Terraform tracks it.
-#
-# Helm stores each release in a single Secret, and Kubernetes caps Secrets at
-# 1 MiB. Gateway API + Envoy Gateway CRDs together exceed that ("Secret
-# sh.helm.release.v1.eg-crds.v1 ... Too long"), so they are installed as two
-# releases of the same chart, one per CRD group.
-resource "helm_release" "envoy_gateway_crds_gatewayapi" {
-  name       = "eg-crds-gatewayapi"
-  repository = "oci://docker.io/envoyproxy"
-  chart      = "gateway-crds-helm"
-  version    = var.envoy_gateway_version
-  namespace  = var.envoy_gw_namespace
-
-  create_namespace = true
-
-  values = [yamlencode({
-    crds = {
-      gatewayAPI = {
-        enabled = true
-        channel = "standard"
-      }
-      envoyGateway = {
-        enabled = false
-      }
-    }
-  })]
-}
-
-resource "helm_release" "envoy_gateway_crds" {
+# These CRDs can NOT be a helm_release: Helm stores the chart in a single
+# release Secret and Kubernetes caps Secrets at 1 MiB, so the install fails with
+# `Secret "sh.helm.release.v1.eg-crds...." Too long` (splitting into two
+# releases does not help, since the whole chart is stored in each). Instead the
+# chart is rendered at plan time and each CRD is applied server-side, like the
+# bash version's `helm template ... | kubectl apply --server-side`. Server-side
+# apply also avoids the oversized last-applied annotation that client-side
+# apply puts on large CRDs.
+data "helm_template" "envoy_gateway_crds" {
   name       = "eg-crds"
   repository = "oci://docker.io/envoyproxy"
   chart      = "gateway-crds-helm"
@@ -45,16 +24,27 @@ resource "helm_release" "envoy_gateway_crds" {
   values = [yamlencode({
     crds = {
       gatewayAPI = {
-        enabled = false
+        enabled = true
+        channel = "standard"
       }
       envoyGateway = {
         enabled = true
       }
     }
   })]
+}
 
-  # The namespace is created by the first release.
-  depends_on = [helm_release.envoy_gateway_crds_gatewayapi]
+data "kubectl_file_documents" "envoy_gateway_crds" {
+  content = data.helm_template.envoy_gateway_crds.manifest
+}
+
+resource "kubectl_manifest" "envoy_gateway_crds" {
+  # Keys are the documents' API paths, known at plan time.
+  for_each  = data.kubectl_file_documents.envoy_gateway_crds.manifests
+  yaml_body = each.value
+
+  server_side_apply = true
+  force_conflicts   = true
 }
 
 # --- Envoy Gateway controller -------------------------------------------------
@@ -65,13 +55,15 @@ resource "helm_release" "envoy_gateway" {
   version    = var.envoy_gateway_version
   namespace  = var.envoy_gw_namespace
 
-  skip_crds = true
+  # The CRD step above is cluster-scoped, so this release owns the namespace.
+  create_namespace = true
+  skip_crds        = true
 
   # Envoy Gateway must be Available before any Gateway resource is accepted.
   wait    = true
   timeout = 600
 
-  depends_on = [helm_release.envoy_gateway_crds]
+  depends_on = [kubectl_manifest.envoy_gateway_crds]
 }
 
 # --- CloudBees namespace ------------------------------------------------------
