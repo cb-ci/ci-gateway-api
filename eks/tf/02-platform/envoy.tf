@@ -8,8 +8,13 @@
 # --- CRDs (Gateway API standard channel + Envoy Gateway) ----------------------
 # The bash version did `helm template ... | kubectl apply --server-side`;
 # installing the CRD chart as a real release means Terraform tracks it.
-resource "helm_release" "envoy_gateway_crds" {
-  name       = "eg-crds"
+#
+# Helm stores each release in a single Secret, and Kubernetes caps Secrets at
+# 1 MiB. Gateway API + Envoy Gateway CRDs together exceed that ("Secret
+# sh.helm.release.v1.eg-crds.v1 ... Too long"), so they are installed as two
+# releases of the same chart, one per CRD group.
+resource "helm_release" "envoy_gateway_crds_gatewayapi" {
+  name       = "eg-crds-gatewayapi"
   repository = "oci://docker.io/envoyproxy"
   chart      = "gateway-crds-helm"
   version    = var.envoy_gateway_version
@@ -24,10 +29,32 @@ resource "helm_release" "envoy_gateway_crds" {
         channel = "standard"
       }
       envoyGateway = {
+        enabled = false
+      }
+    }
+  })]
+}
+
+resource "helm_release" "envoy_gateway_crds" {
+  name       = "eg-crds"
+  repository = "oci://docker.io/envoyproxy"
+  chart      = "gateway-crds-helm"
+  version    = var.envoy_gateway_version
+  namespace  = var.envoy_gw_namespace
+
+  values = [yamlencode({
+    crds = {
+      gatewayAPI = {
+        enabled = false
+      }
+      envoyGateway = {
         enabled = true
       }
     }
   })]
+
+  # The namespace is created by the first release.
+  depends_on = [helm_release.envoy_gateway_crds_gatewayapi]
 }
 
 # --- Envoy Gateway controller -------------------------------------------------
