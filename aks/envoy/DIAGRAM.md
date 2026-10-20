@@ -62,7 +62,7 @@ graph TD
 
 ## Component Breakdown
 
-1. **External Client**: Initiates HTTPS requests to `https://gateway-envoy.acaternberg.flow-training.beescloud.com/`.
+1. **External Client**: Initiates HTTPS requests to `https://gateway-envoy.acaternberg.ps.beescloud.com/`.
 2. **AKS LoadBalancer**: A `Service` of type `LoadBalancer` automatically provisioned by Envoy Gateway. Exposes the Envoy proxy pods externally via Azure Load Balancer.
 3. **GatewayClass (`eg`)**: Links the Gateway resource to the Envoy Gateway controller (`gateway.envoyproxy.io/gatewayclass-controller`).
 4. **Gateway (`cloudbees-gateway`)**: Defines the HTTPS listener on port 443 with TLS termination using the Kubernetes TLS secret.

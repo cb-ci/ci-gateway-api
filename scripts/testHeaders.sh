@@ -6,7 +6,7 @@
 
 #set -x
 
-CONTROLLER_URL=https://gateway-envoy.acaternberg.flow-training.beescloud.com/ha
+CONTROLLER_URL=https://gateway-envoy.acaternberg.ps.beescloud.com/ha
 #CONTROLLER_URL=https://controller.ha
 #curl connect_timeout
 CONNECT_TIMEOUT=5

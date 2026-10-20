@@ -42,7 +42,7 @@ Once the deployment is complete, retrieve the initial admin password:
 kubectl exec -ti cjoc-0 -n cloudbees-envoy -- cat /var/jenkins_home/secrets/initialAdminPassword
 ```
 
-Visit: `https://gateway-envoy.acaternberg.flow-training.beescloud.com/cjoc`
+Visit: `https://gateway-envoy.acaternberg.ps.beescloud.com/cjoc`
 
 ## Architecture
 
@@ -90,14 +90,14 @@ kubectl describe backendtrafficpolicy -n cloudbees-envoy
 ### Test with curl
 
 ```bash
-curl -v -L -k https://gateway-envoy.acaternberg.flow-training.beescloud.com/cjoc/whoAmI/api/json
+curl -v -L -k https://gateway-envoy.acaternberg.ps.beescloud.com/cjoc/whoAmI/api/json
 
 # Requires controller "ha" to be created first
-curl -v -L -k https://gateway-envoy.acaternberg.flow-training.beescloud.com/ha/whoAmI/api/json
+curl -v -L -k https://gateway-envoy.acaternberg.ps.beescloud.com/ha/whoAmI/api/json
 
 # Sticky session test
-curl -c cookie.txt -v -L -k https://gateway-envoy.acaternberg.flow-training.beescloud.com/ha/whoAmI/api/json
-curl -b cookie.txt -v -L -k https://gateway-envoy.acaternberg.flow-training.beescloud.com/ha/whoAmI/api/json
+curl -c cookie.txt -v -L -k https://gateway-envoy.acaternberg.ps.beescloud.com/ha/whoAmI/api/json
+curl -b cookie.txt -v -L -k https://gateway-envoy.acaternberg.ps.beescloud.com/ha/whoAmI/api/json
 ```
 
 ### Continuous Sticky Session Testing
