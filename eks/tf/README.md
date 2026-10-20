@@ -162,24 +162,215 @@ Tear down in reverse: `03-ec2-controller` (if applied) first, then
 
 ## Architecture
 
+### Traffic flow
+
+```mermaid
+flowchart TD
+    Internet([Internet]) -->|"HTTPS :443 — ACM cert, TLS terminates here"| ALB
+    ALB["ALB<br/>kubernetes_ingress_v1.cjoc_alb<br/>(AWS Load Balancer Controller)"] -->|"HTTP, target-type: ip"| SVC
+    SVC["kubernetes_service.envoy_stable<br/>ClusterIP :8443"] --> Envoy
+    Envoy["Envoy pods<br/>Gateway 'https' listener (HTTP:8443)"] --> Route
+    Route["HTTPRoute<br/>(rendered by the CloudBees CI chart)"] --> CJOC["CJOC / controllers"]
 ```
-Internet
-   │  HTTPS:443 — ACM cert, TLS terminates here
-   ▼
- ALB  ◄── kubernetes_ingress_v1.cjoc_alb  (AWS Load Balancer Controller)
-   │  HTTP, target-type: ip
-   ▼
- kubernetes_service.envoy_stable  (ClusterIP, port 8443)
-   │
-   ▼
- Envoy pods ──► Gateway "https" listener (HTTP:8443)
-   │
-   ▼
- HTTPRoute (rendered by the CloudBees CI chart)
-   │
-   ▼
- CJOC / controllers
+
+### Modules `01-infra` and `02-platform`
+
+Solid arrows are creation/ownership or data flow; dotted arrows are
+cross-resource references (IAM, DNS, validation).
+
+```mermaid
+flowchart TB
+    subgraph R53["Route53 (existing public hosted zone)"]
+        ZONE[("Hosted zone<br/>data.aws_route53_zone")]
+    end
+
+    subgraph INFRA["01-infra"]
+        subgraph VPC["module.vpc: VPC, 1 NAT GW, DNS hostnames"]
+            PUB["Public subnets<br/>tag kubernetes.io/role/elb"]
+            PRIV["Private subnets<br/>tag kubernetes.io/role/internal-elb"]
+            NAT["Single NAT gateway + IGW"]
+        end
+
+        subgraph EKS["EKS cluster"]
+            CLUSTER["aws_eks_cluster.this<br/>+ cluster IAM role/policy"]
+            OIDC["aws_iam_openid_connect_provider"]
+            NODEROLE["Node IAM role + policy attachments"]
+            NG_C["node_group controllers<br/>ARM64, taint workload=controller"]
+            NG_A["node_group agents<br/>x86_64, taint workload=agent"]
+            NG_S["node_group system<br/>untainted"]
+            subgraph ADDONS["EKS addons"]
+                A1["vpc_cni / kube_proxy / coredns"]
+                A2["pod_identity_agent"]
+                A3["ebs_csi / efs_csi"]
+            end
+        end
+
+        subgraph IAM["IAM"]
+            IRSA["aws_iam_role.irsa (for_each, IRSA)<br/>ebs_csi, efs_csi,<br/>alb_controller, cluster_autoscaler"]
+            POL["Policies: alb_controller,<br/>cluster_autoscaler, external_dns"]
+            EDNSROLE["aws_iam_role.external_dns<br/>+ aws_eks_pod_identity_association"]
+        end
+
+        subgraph EFSG["EFS"]
+            EFS[("aws_efs_file_system")]
+            EFSMT["aws_efs_mount_target (per AZ)"]
+            EFSSG["EFS security group + NFS ingress rule"]
+        end
+
+        subgraph ACM1["ACM"]
+            CERT["aws_acm_certificate.cjoc"]
+            VREC["aws_route53_record.cjoc_validation"]
+            CVAL["aws_acm_certificate_validation"]
+        end
+    end
+
+    subgraph PLATFORM["02-platform (reads 01-infra via terraform_remote_state)"]
+        subgraph KSYS["kube-system"]
+            LBC["helm_release.alb_controller<br/>+ ServiceAccount"]
+            CA["helm_release.cluster_autoscaler<br/>+ ServiceAccount, DRA ClusterRole/Binding"]
+            EDNS["helm_release.external_dns"]
+        end
+
+        subgraph ENVOYNS["Envoy Gateway"]
+            CRDS["kubectl_manifest.envoy_gateway_crds"]
+            EGW["helm_release.envoy_gateway"]
+            EPROXY["kubectl_manifest.envoy_proxy"]
+            GWC["kubectl_manifest.gateway_class"]
+            GW["kubectl_manifest.gateway<br/>(listener HTTP:8443)"]
+            ESC["kubectl_manifest.keep_escaped_slashes"]
+            SVC["kubernetes_service.envoy_stable<br/>ClusterIP :8443"]
+        end
+
+        subgraph CBNS["Namespace cloudbees-core"]
+            NS["kubernetes_namespace.cloudbees"]
+            SC["kubernetes_storage_class.efs<br/>(reclaimPolicy: Delete)"]
+            CBCI["helm_release.cloudbees_ci<br/>CJOC + HTTPRoute"]
+            ING["kubernetes_ingress_v1.cjoc_alb"]
+            subgraph RA["Remote agent access (builds namespace)"]
+                RSA["ServiceAccount jenkins-agent"]
+                RROLE["Role + RoleBinding"]
+                RTOK["Secret: token"]
+            end
+        end
+    end
+
+    ALB{{"Shared ALB<br/>(provisioned by LBC from Ingress)"}}
+
+    %% 01-infra internal wiring
+    PUB --- NAT
+    NAT --> PRIV
+    CLUSTER --> OIDC
+    CLUSTER --> NG_C & NG_A & NG_S
+    NODEROLE -.-> NG_C & NG_A & NG_S
+    PRIV -.-> NG_C & NG_A & NG_S
+    CLUSTER --> ADDONS
+    OIDC -.-> IRSA
+    POL -.-> IRSA
+    POL -.-> EDNSROLE
+    IRSA -.-> A3
+    A2 -.-> EDNSROLE
+    EFSSG --> EFSMT
+    EFS --> EFSMT
+    PRIV -.-> EFSMT
+    CERT --> VREC --> CVAL
+    ZONE -.-> VREC
+
+    %% 02-platform wiring
+    IRSA -.->|"IRSA"| LBC
+    IRSA -.->|"IRSA"| CA
+    EDNSROLE -.->|"Pod Identity"| EDNS
+    CRDS --> EGW --> EPROXY --> GWC --> GW --> ESC
+    GW --> SVC
+    NS --> CBCI
+    EFS -.-> SC
+    SC --> CBCI
+    CBCI --> RA
+    LBC -->|"reconciles Ingress"| ING
+    ING --> ALB
+    CVAL -.->|"certificate_arn"| ING
+    ALB -->|"target-type: ip"| SVC
+    SVC --> GW
+    GW -->|"HTTPRoute"| CBCI
+    EDNS -.->|"upserts cjoc_host_name alias"| ZONE
+    ALB -.-> PUB
 ```
+
+### Optional module `03-ec2-controller`
+
+Depends on `02-platform` having been applied. It discovers the shared ALB and
+HTTPS listener by LBC tags (`data.aws_lbs` / `aws_lb` / `aws_lb_listener`),
+and reads VPC/subnet/cluster security group values from `01-infra` via
+`terraform_remote_state`.
+
+```mermaid
+flowchart TB
+    Internet([Internet]) -->|"HTTPS :443<br/>Host: ec2_controller_host_name"| ALB
+
+    subgraph EXISTING["Existing (owned by 01-infra / 02-platform)"]
+        ALB{{"Shared ALB"}}
+        LST["HTTPS listener<br/>(default cert: cjoc)"]
+        ZONE[("Route53 hosted zone")]
+        CSG["EKS cluster security group"]
+        VPCX["VPC / private subnets"]
+        ALB --- LST
+    end
+
+    subgraph EC2MOD["03-ec2-controller"]
+        subgraph DNS["DNS"]
+            AREC["aws_route53_record.this<br/>alias A to shared ALB"]
+        end
+
+        subgraph CERTS["ACM (SNI)"]
+            CERT["aws_acm_certificate.this"]
+            VREC["aws_route53_record.validation"]
+            CVAL["aws_acm_certificate_validation"]
+            LCERT["aws_lb_listener_certificate<br/>(additional SNI cert)"]
+        end
+
+        subgraph LB["ALB routing"]
+            RULE["aws_lb_listener_rule<br/>host-header, priority = listener_rule_priority"]
+            TG["aws_lb_target_group<br/>port = controller_port"]
+            ATT["aws_lb_target_group_attachment"]
+        end
+
+        subgraph SEC["Security"]
+            SG["aws_security_group.this"]
+            R1["ingress: controller_port from ALB SG"]
+            R2["ingress: 80 / 443 from ALB SG"]
+            R3["ingress: SSH from ssh_cidr"]
+            R4["eks_api_from_this:<br/>443 on cluster SG from this SG"]
+        end
+
+        subgraph IAMX["IAM"]
+            ROLE["aws_iam_role.this"]
+            SSM["AmazonSSMManagedInstanceCore attachment"]
+            PROF["aws_iam_instance_profile"]
+        end
+
+        subgraph COMP["Compute"]
+            AMI["data.aws_ssm_parameter.al2023<br/>(latest AL2023 AMI)"]
+            EC2["aws_instance.this<br/>user_data: Docker running<br/>CloudBees CI Client Controller"]
+        end
+    end
+
+    ALB --> LST
+    LST --> RULE --> TG --> ATT --> EC2
+    CERT --> VREC --> CVAL --> LCERT --> LST
+    ZONE -.-> VREC
+    AREC -.-> ZONE
+    AREC -.-> ALB
+    ROLE --> SSM
+    ROLE --> PROF --> EC2
+    AMI --> EC2
+    SG --> R1 & R2 & R3 & R4
+    SG --> EC2
+    R4 -.-> CSG
+    VPCX -.-> EC2
+```
+
+**Not managed by Terraform:** attaching the instance to CJOC as a managed
+Client Controller (needs a controller token from CJOC's "Add Controller" UI or
+CasC).
 
 ## Standalone EC2 Client Controller (`03-ec2-controller`)
 
