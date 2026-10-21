@@ -99,7 +99,7 @@ variable "cloudbees_image_tag" {
 variable "storage_class_name" {
   description = "Name of the EFS-backed StorageClass used for CloudBees CI persistence."
   type        = string
-  default     = "efs-sc"
+  default     = "efs-sc" # better ebs for cjoc?
 }
 
 variable "alb_idle_timeout_seconds" {

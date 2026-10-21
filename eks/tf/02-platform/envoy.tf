@@ -169,6 +169,7 @@ resource "kubectl_manifest" "gateway" {
 #   /cjoc/administrativeMonitor/hudson.diagnosis.ReverseProxySetupMonitor/...
 # Envoy's default UnescapeAndRedirect fails these with path_normalization_failed.
 # See https://gateway.envoyproxy.io/latest/api/extension_types/#pathsettings
+# Also trusts one X-Forwarded-For hop (the ALB), matching 04-installEnvoy.sh.
 resource "kubectl_manifest" "keep_escaped_slashes" {
   yaml_body = yamlencode({
     apiVersion = "gateway.envoyproxy.io/v1alpha1"
@@ -183,6 +184,13 @@ resource "kubectl_manifest" "keep_escaped_slashes" {
         kind  = "Gateway"
         name  = var.gateway_name
       }]
+      # The ALB is one trusted hop in front of Envoy, so honour its
+      # X-Forwarded-For/-Proto headers (same as the bash version).
+      clientIPDetection = {
+        xForwardedFor = {
+          numTrustedHops = 1
+        }
+      }
       path = {
         escapedSlashesAction = "KeepUnchanged"
       }

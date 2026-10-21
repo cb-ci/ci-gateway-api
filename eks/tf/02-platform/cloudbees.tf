@@ -13,51 +13,14 @@ resource "helm_release" "cloudbees_ci" {
   # CJOC is a StatefulSet restoring JENKINS_HOME from EFS; give it room.
   timeout = 900
 
-  values = [yamlencode({
-    Gateway = {
-      Enabled     = true
-      Name        = var.gateway_name
-      SectionName = "https"
-      Namespace   = var.namespace_cloudbees
-    }
-
-    OperationsCenter = {
-      HostName = local.infra.cjoc_host_name
-      # https even though Envoy's listener is plain HTTP — this controls the
-      # URLs CJOC generates, and the ALB is what terminates TLS.
-      Protocol = "https"
-      # Forces CJOC onto the tainted "controllers" pool. A toleration alone
-      # only grants permission to land there — nodeSelector is what actually
-      # requires it (see controller-statefullset-patch.yaml for the same
-      # nodeSelector-over-affinity caveat on dynamically-provisioned
-      # Managed Controllers).
-      NodeSelector = {
-        workload = "controller"
-      }
-      Tolerations = [{
-        key      = "workload"
-        operator = "Equal"
-        value    = "controller"
-        effect   = "NoSchedule"
-      }]
-    }
-
-    Agents = {
-      SeparateNamespace = {
-        Enabled = true
-        Create  = true
-      }
-    }
-
-    Persistence = {
-      StorageClass = var.storage_class_name
-    }
-
-    Common = {
-      image = {
-        tag = var.cloudbees_image_tag
-      }
-    }
+  # Static values live in cloudbees-values.yaml.tftpl; only the variable parts
+  # are injected here.
+  values = [templatefile("${path.module}/cloudbees-values.yaml.tftpl", {
+    gateway_name       = var.gateway_name
+    namespace          = var.namespace_cloudbees
+    cjoc_host_name     = local.infra.cjoc_host_name
+    storage_class_name = var.storage_class_name
+    image_tag          = var.cloudbees_image_tag
   })]
 
   depends_on = [

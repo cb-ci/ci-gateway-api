@@ -1,0 +1,39 @@
+# Helm values for helm_release.cloudbees_ci (cloudbees.tf).
+# Rendered with templatefile(); the dollar-brace placeholders below are filled
+# in by Terraform.
+Gateway:
+  Enabled: true
+  Name: ${gateway_name}
+  # Must match the Gateway listener name in envoy.tf.
+  SectionName: https
+  Namespace: ${namespace}
+
+OperationsCenter:
+  HostName: ${cjoc_host_name}
+  # https even though Envoy's listener is plain HTTP — this controls the
+  # URLs CJOC generates, and the ALB is what terminates TLS.
+  Protocol: https
+  # Forces CJOC onto the tainted "controllers" pool. A toleration alone
+  # only grants permission to land there — nodeSelector is what actually
+  # requires it (see controller-statefullset-patch.yaml for the same
+  # nodeSelector-over-affinity caveat on dynamically-provisioned
+  # Managed Controllers).
+  NodeSelector:
+    workload: controller
+  Tolerations:
+    - key: workload
+      operator: Equal
+      value: controller
+      effect: NoSchedule
+
+Agents:
+  SeparateNamespace:
+    Enabled: true
+    Create: true
+
+Persistence:
+  StorageClass: ${storage_class_name}
+
+Common:
+  image:
+    tag: ${image_tag}
