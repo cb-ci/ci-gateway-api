@@ -69,6 +69,7 @@ helm upgrade --install cloudbees-core-envoy cloudbees/cloudbees-core \
   --set Agents.SeparateNamespace.Enabled=false \
   --set Persistence.StorageClass="${CLOUDBEES_STORAGE_CLASS}" \
   --set Common.image.tag='latest' \
+  --set Master.HighAvailabilitySupport=true \
   --set OperationsCenter.CasC.Enabled=true \
   --set OperationsCenter.CasC.Retriever.Enabled=true \
   --set OperationsCenter.CasC.Retriever.scmRepo="${CASC_SCM_REPO}" \

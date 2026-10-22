@@ -32,6 +32,7 @@ helm upgrade --install cloudbees-core-envoy cloudbees/cloudbees-core \
   --set OperationsCenter.Protocol=https \
   --set OperationsCenter.NodeSelector.workload=controller \
   --set-json 'OperationsCenter.Tolerations=[{"key":"workload","operator":"Equal","value":"controller","effect":"NoSchedule"}]' \
+  --set Master.HighAvailabilitySupport=true \
   --set Agents.SeparateNamespace.Enabled=true \
   --set Agents.SeparateNamespace.Create=true \
   --set Persistence.StorageClass="${CLOUDBEES_STORAGE_CLASS}" \
