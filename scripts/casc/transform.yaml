@@ -1,0 +1,159 @@
+# BELOW just required for local development
+# temporary remove authorizationStrategy, just required for local development without CJCOC.
+#  - op: remove
+#    path: jenkins.authorizationStrategy
+# temporary replace security realm, just required for local development without CJCOC.
+#  - op: patch
+#    path: jenkins.securityRealm
+#    patchfile: "../patches/jenkins_securityrealm.yaml"
+# temporary remove proxy just required for local development without CJCOC.
+#  - op: remove
+#    path: jenkins.proxy
+
+  - op: remove
+    path: credentials.blueOcean
+  - op: remove
+    path: license
+  - op: remove
+    path: jenkins.myViewsTabBar
+  - op: remove
+    path: jenkins.labelAtoms
+  - op: remove
+    path: jenkins.agentProtocols
+  - op: remove
+    path: jenkins.remotingSecurity
+  - op: remove
+    path: jenkins.updateCenter
+  - op: remove
+    path: jenkins.cloud.injectionConfig.mavenCaptureGoalInputFiles
+  - op: remove
+    path: jenkins.themeManager
+  - op: remove
+    path: jenkins.ghprbTrigger
+  - op: remove
+    path: jenkins.repository-connector
+  - op: remove
+    path: security.globalJobDslSecurityConfiguration
+  - op: remove
+    path: security.idToken
+  - op: remove
+    path: security.envInject
+  - op: remove
+    path: unclassified.operationsCenterRootAction
+  - op: remove
+    path: unclassified.location
+  - op: remove
+    path: unclassified.badgePlugin
+  - op: remove
+    path: unclassiefied.mavenModuleSet
+  - op: remove
+    path: unclassified.artifactManager
+  - op: remove
+    path: unclassified.globalSettings
+  - op: remove
+    path: unclassified.whitelist
+  - op: remove
+    path: unclassified.separator
+  # https://plugins.jenkins.io/aws-cloudwatch-logs-publisher/?utm_source=chatgpt.com
+  - op: remove
+    path: unclassified.aWSLogsConfig
+  - op: remove
+    path: unclassified.cyberArkWriterGlobalConfiguration
+  - op: remove
+    path: unclassified.globalConjurConfiguration
+  - op: remove
+    path: unclassified.globalNexusConfiguration
+  - op: remove
+    path: unclassified.pluginImpl
+  - op: remove
+    path: unclassified.themeManager
+  - op: remove
+    path: unclassified.artifactoryBuilder
+  - op: remove
+    path: unclassified.ivyBuildTrigger
+  - op: remove
+    path: unclassified.sQLPlusRunnerBuilder
+  - op: remove
+    path: unclassified.groovy
+  - op: remove
+    path: unclassified.injectionConfig.checkForBuildAgentErrors
+  - op: remove
+    path: unclassified.injectionConfig.enforceUrl
+  - op: remove
+    path: unclassified.injectionConfig.gradleCaptureTaskInputFiles
+  - op: remove
+    path: unclassified.injectionConfig.mavenCaptureGoalInputFiles
+  - op: remove
+    path: unclassified.enrichedSummaryConfig
+  - op: remove
+    path: unclassified.prismConfiguration
+  - op: remove
+    path: unclassified.publishConfluence
+  - op: remove
+    path: unclassified.qualysGlobalConfig
+  - op: remove
+    path: unclassified.cloudShareConfiguration
+  - op: remove
+    path: unclassified.violationsToGitHubConfiguration
+  - op: remove
+    path: unclassified.buildUserVars
+  - op: remove
+    path: unclassified.cpwrGlobalConfiguration
+  - op: remove
+    path: unclassified.configuration
+  - op: remove
+    path: unclassified.subversionSCM
+  - op: remove
+    path: tool.pipelineMaven
+  - op: remove
+    path: tool.pythonInstallation
+  - op: remove
+    path: tool.go
+  - op: remove
+    path: tool.terraform
+  - op: remove
+    path: tool.xvfb
+  - op: remove
+    path: tool.groovy
+  - op: remove
+    path: tool.powerShellInstallation
+    # datadogGlobalConfiguration need to be updated to new configuration, for now, we just remove ut
+  - op: remove
+    path: unclassified.datadogGlobalConfiguration
+    # Not clear yet why this isnt working , so we remove it for now
+  - op: remove
+    path: unclassified.splunkJenkinsInstallation
+  - op: remove
+    path: unclassified.rules
+  - op: remove
+    path: unclassified.unleashMavenBuildWrapper
+  - op: remove
+    path: unclassified.simple-theme-plugin
+  - op: remove
+    path: unclassified.audit-trail
+  - op: remove
+    path: unclassified.lockableResourcesManager
+  - op: remove
+    path: unclassified.datadogGlobalConfiguration
+  - op: remove
+    path: unclassified.awsCredentialsProvider
+  - op: remove
+    path: unclassified.ansiColorBuildWrapper
+  - op: remove
+    path: unclassified.buildMonitorView
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,8 @@
+jenkins:
+  clouds:
+    - amazonEC2:
+        credentialsId: "TODO-aws-credentialsId"
+        name: "TODO-ec2-cloudname"
+        region: "TODO-aws-region"
+        sshKeysCredentialsId: "TODO-aws-ssh-credentialsId"
+        useInstanceProfileForCredentials: false

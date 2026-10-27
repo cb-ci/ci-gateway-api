@@ -1,0 +1,15 @@
+local:
+  allowsSignup: false
+  enableCaptcha: false
+  users:
+    - id: "admin"
+      password: "XXX"
+      name: "admin"
+      properties:
+        - preferredProvider:
+            providerId: "default"
+        - "timezone"
+        - "apiToken"
+        - mailer:
+            emailAddress: "user@example.com"
+        - "apiToken"
