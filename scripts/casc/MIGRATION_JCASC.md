@@ -81,7 +81,7 @@ test-controller/      run.log, tmp.log (controller log), jenkins_home/
 | 0 | Wipe and recreate `WORK_DIR`; copy the helper scripts and write a helper `.env` pointing at the work dir |
 | 1 | `POST <SRC_URL>/configuration-as-code/export` writes `jenkins.yaml` |
 | 2 | Run an inline groovy script via `<SRC_URL>/scriptText`; it prints `- id: <plugin>` per installed plugin |
-| 3 | The groovy output is already the `plugins.yaml` content (`plugins:` list); the script checks it contains plugins |
+| 3 | The groovy output (`plugins-export.txt`) is filtered to the `plugins:` and `- id:` lines and written to `plugins.yaml`. Other output, such as the `Result: [...]` line the script console appends, is dropped. The script fails if no plugin is found |
 | 4/5 | Run `scripts/00-indent2Yaml.sh`, `01-jenkinsYamlClean.sh` (removes the paths listed in `transform.yaml`), `02-pluginsRemoveSuspended.sh` |
 | 6/7 | Write `bundle.yaml` directly as `apiVersion: "2"` |
 | 8 | Check the YAML with `yq`, start the test controller, wait for it and scan its log for bundle errors |

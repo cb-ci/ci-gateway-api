@@ -145,11 +145,14 @@ Jenkins.instance.pluginManager.plugins
   .collect { it.shortName }
   .sort()
   .each { println "- id: ${it}" }
+return null   // /scriptText appends "Result: <value>" for a non-null return value, which is not valid plugins.yaml
 GROOVY
 curl_auth "$SRC_USER" "$SRC_TOKEN" -X POST "${SRC_URL}/scriptText" \
-  --data-urlencode "script@${GROOVY_FILE}" -o "${BUNDLE_DIR}/plugins.yaml"
+  --data-urlencode "script@${GROOVY_FILE}" -o "${WORK_DIR}/plugins-export.txt"
+# keep only the expected lines, so anything else the script console prints (e.g. "Result: [...]") never reaches plugins.yaml
+tr -d '\r' < "${WORK_DIR}/plugins-export.txt" | grep -E '^(plugins:|- id: [A-Za-z0-9._-]+)$' > "${BUNDLE_DIR}/plugins.yaml" || true
 grep -q '^- id: ' "${BUNDLE_DIR}/plugins.yaml" \
-  || { echo "❌ no plugins found in export, see ${BUNDLE_DIR}/plugins.yaml" >&2; exit 1; }
+  || { echo "❌ no plugins found in export, see ${WORK_DIR}/plugins-export.txt" >&2; exit 1; }
 echo "🔌 $(grep -c '^- id: ' "${BUNDLE_DIR}/plugins.yaml") plugins exported"
 
 # 4./5. fix indent, clean jenkins.yaml, drop suspended plugins (run from the helpers dir: transform path is relative)
