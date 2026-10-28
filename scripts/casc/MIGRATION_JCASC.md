@@ -4,7 +4,7 @@ Two scripts in this directory:
 
 | Script | Purpose |
 | --- | --- |
-| `migrateJcasCController2CasCController.sh` | Exports the config of a Jenkins OSS controller (JCasC plugin) and builds a CloudBees CasC bundle (`bundle.yaml`, `jenkins.yaml`, `plugins.yaml`). Validates it on a test controller. |
+| `migrateJcasCController2CasCController.sh` | Exports the config of a Jenkins OSS controller (JCasC plugin) and builds a CloudBees CasC bundle (`bundle.yaml`, `jenkins.yaml`, `plugins.yaml`). Checks that a test controller loads it. |
 | `runTestController.sh` | Starts a CloudBees CI controller in Docker with a CasC bundle mounted. Used by the migration script, also usable on its own. |
 
 **Terms**
@@ -86,6 +86,54 @@ test-controller/      run.log, tmp.log (controller log), jenkins_home/
 | 6/7 | Write `bundle.yaml` directly as `apiVersion: "2"` |
 | 8 | Check the YAML with `yq`, start the test controller, wait for it and scan its log for bundle errors |
 | 9 | Not automated. The script prints how to apply the bundle |
+
+### Flow
+
+```mermaid
+flowchart TD
+    A([Start]) --> B["Load .env, parse options<br/>--keep-controller, --yes"]
+    B --> C{SRC_URL, SRC_USER,<br/>SRC_TOKEN set?}
+    C -- no --> X1([Exit 1: missing config])
+    C -- yes --> D{Required tools<br/>installed?}
+    D -- no --> X2([Exit 1: missing tool])
+    D -- yes --> E{Test controller<br/>already running?}
+    E -- no --> G
+    E -- yes --> F{Stop it?<br/>prompt, or --yes}
+    F -- no --> X3([Abort, nothing changed])
+    F -- yes --> F2[docker stop] --> G
+    G{WORK_DIR empty or<br/>has marker file?}
+    G -- no --> X4([Exit 1: refuse to delete])
+    G -- yes --> H[Wipe and recreate WORK_DIR]
+    H --> I[Export jenkins.yaml<br/>from source controller]
+    I --> J[Save copy in original/jenkins.yaml]
+    J --> K[Export plugin list<br/>to plugins.yaml]
+    K --> L{Plugins found?}
+    L -- no --> X5([Exit 1: no plugins])
+    L -- yes --> M[Indent fix, clean jenkins.yaml,<br/>remove suspended plugins]
+    M --> N[Write bundle.yaml<br/>apiVersion 2]
+    N --> O{yq syntax check<br/>passes?}
+    O -- no --> X6([Exit 1: invalid YAML])
+    O -- yes --> P{"START_TEST_CONTROLLER<br/>= true?"}
+    P -- no --> Z
+    P -- yes --> Q[Copy bundle to test-bundle/,<br/>remove Operations Center settings]
+    Q --> R[Start container with<br/>runTestController.sh]
+    R --> S{"Container up and<br/>/login answers?"}
+    S -- no --> X7([Exit 1: not started or not ready])
+    S -- yes --> T{Bundle errors<br/>in controller log?}
+    T -- yes --> X8([Exit 1: bundle errors])
+    T -- no --> U{"--keep-controller?"}
+    U -- yes --> V[Leave controller running]
+    U -- no --> W[docker stop]
+    V --> Z
+    W --> Z
+    Z[Print result and<br/>how to apply the bundle] --> END([Done])
+    X7 -.-> Y[EXIT trap: stop controller<br/>unless --keep-controller]
+    X8 -.-> Y
+```
+
+Failures after the container has started also run the EXIT trap, which stops the controller unless `--keep-controller` is set (dotted arrows).
+
+### Sequence
 
 ```mermaid
 sequenceDiagram
