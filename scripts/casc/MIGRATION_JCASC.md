@@ -18,6 +18,11 @@ Two scripts in this directory:
 - `docker` (only when a test controller is started)
 - A user and API token on the source controller that may call `/configuration-as-code/export` and `/scriptText` (administer permission)
 
+## Out of Scope
+
+- Credentials: This script does not migrate any credentials. They will be migrated separately. See <https://github.com/cb-ci/ci-credentials-migration>
+- Jobs: This script does not migrate any jobs. They will be migrated separately. (f.e. using rsync or scp)
+
 ## Configuration
 
 The migration script reads `scripts/casc/.env` (git-ignored) and falls back to environment variables. Values in `.env` override the environment. Never commit tokens.
