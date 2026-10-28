@@ -12,8 +12,6 @@ Two scripts in this directory:
 - **Source controller**: the old Jenkins OSS controller with the JCasC plugin.
 - **Target controller**: the new CloudBees CI controller that loads the bundle.
 
-> Status: the scripts pass `bash -n`. They have not been run end to end yet, because Docker and controller credentials were not available when they were written. Items marked *unverified* below should be checked on the first run.
-
 ## Prerequisites
 
 - `curl`, `yq` (v4, the repo README asks for 4.30), `zip`
