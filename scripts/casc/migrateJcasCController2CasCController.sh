@@ -22,7 +22,7 @@ set -euo pipefail
 #   SRC_URL, SRC_USER, SRC_TOKEN   source controller (Jenkins OSS + JCasC), user + API token
 #   KEEP_TEST_CONTROLLER           keep the test controller running after the script (default: false, see --keep-controller)
 #   START_TEST_CONTROLLER          start a local test controller (runTestController.sh) to check the bundle (default: true)
-#   TEST_CI_VERSION, TEST_CI_TYPE, TEST_JENKINS_HOME, TEST_PORT, TEST_STARTUP_TIMEOUT   test controller settings (default: latest, mm, 9080, 300)
+#   TEST_CI_VERSION, TEST_CI_TYPE, TEST_PORT, TEST_STARTUP_TIMEOUT   test controller settings (default: latest, mm, 9080, 300)
 #   BUNDLE_ID                      bundle id (default: casc-controller)
 #   WORK_DIR                       work dir (default: ${TMPDIR:-/tmp}/casc-migration-workdir); wiped at the start of each run, kept after it
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -49,8 +49,8 @@ Usage: $0 [options]
 Options:
   --keep-controller   leave the test controller running after the script (default: stop it).
                       Same as KEEP_TEST_CONTROLLER=true in .env, the flag wins.
-  -y, --yes           do not ask before stopping an already running test controller and
-                      deleting its Jenkins home (required when there is no terminal)
+  -y, --yes           do not ask before stopping an already running test controller
+                      (required when there is no terminal)
   -h, --help          show this help
 USAGE
 }
@@ -70,7 +70,9 @@ done
 : "${SRC_TOKEN:?set SRC_TOKEN (Jenkins API token)}"
 SRC_URL="${SRC_URL%/}"
 
-for tool in curl yq zip; do
+tools=(curl yq)
+[[ "$START_TEST_CONTROLLER" == "true" ]] && tools+=(docker)
+for tool in "${tools[@]}"; do
   command -v "$tool" >/dev/null || { echo "❌ missing tool: $tool" >&2; exit 1; }
 done
 
@@ -87,30 +89,16 @@ WORK_MARKER=".casc-migration-workdir"
 case "$WORK_DIR" in
   ""|"/"|"$HOME"|"$SCRIPT_DIR"|"$PWD") echo "❌ refusing to use WORK_DIR='$WORK_DIR'" >&2; exit 1 ;;
 esac
-# A test controller from a previous run (e.g. started with --keep-controller) holds the old jenkins_home.
-# Ask before stopping it and deleting that home, so the new run starts fresh.
-if [[ "$START_TEST_CONTROLLER" == "true" ]] \
-   && command -v docker >/dev/null && docker info >/dev/null 2>&1 \
-   && [[ -n "$(docker ps -q --filter "name=^${TEST_CONTAINER_NAME}$")" ]]; then
-  OLD_HOME="$(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/var/jenkins_home"}}{{.Source}}{{end}}{{end}}' "$TEST_CONTAINER_NAME" 2>/dev/null || true)"
-  echo "⚠️  Test controller '${TEST_CONTAINER_NAME}' is already running (Jenkins home: ${OLD_HOME:-unknown})."
+# A test controller from a previous run (e.g. started with --keep-controller) still holds its jenkins_home.
+# Ask before stopping it; the old home is deleted with the work dir below, so the new run starts fresh.
+if [[ "$START_TEST_CONTROLLER" == "true" && -n "$(docker ps -q --filter "name=^${TEST_CONTAINER_NAME}$" 2>/dev/null)" ]]; then
+  echo "⚠️  Test controller '${TEST_CONTAINER_NAME}' is already running."
   if [[ "$ASSUME_YES" != "true" ]]; then
-    if [[ ! -t 0 ]]; then
-      echo "❌ no terminal to ask, re-run with --yes to stop it and delete its Jenkins home" >&2
-      exit 1
-    fi
+    [[ -t 0 ]] || { echo "❌ no terminal to ask, re-run with --yes to stop it" >&2; exit 1; }
     read -r -p "Stop it and delete its Jenkins home for a fresh start? [y/N] " answer
     [[ "$answer" =~ ^[Yy]$ ]] || { echo "Aborted, nothing changed."; exit 1; }
   fi
   docker stop "$TEST_CONTAINER_NAME" >/dev/null
-  # only delete a home this script manages: below WORK_DIR or the configured TEST_JENKINS_HOME
-  if [[ -n "$OLD_HOME" && "$OLD_HOME" != "/" && "$OLD_HOME" != "$HOME" && -d "$OLD_HOME" \
-        && ( "$OLD_HOME" == "$WORK_DIR"/* || "$OLD_HOME" == "${TEST_JENKINS_HOME:-}" ) ]]; then
-    echo "🧹 Deleting old Jenkins home $OLD_HOME"
-    rm -rf -- "$OLD_HOME" || echo "⚠️  could not fully delete $OLD_HOME, remove it manually" >&2
-  elif [[ -n "$OLD_HOME" ]]; then
-    echo "⚠️  Jenkins home $OLD_HOME is outside WORK_DIR/TEST_JENKINS_HOME, not deleting it" >&2
-  fi
 fi
 if [[ -d "$WORK_DIR" ]]; then
   # only delete a dir this script created (marker file) or an empty one
@@ -142,36 +130,27 @@ ENV
 # 1. download jenkins.yaml from the source controller (JCasC export)
 echo "⬇️  Exporting jenkins.yaml from $SRC_URL"
 curl_auth "$SRC_USER" "$SRC_TOKEN" -X POST "${SRC_URL}/configuration-as-code/export" -o "${BUNDLE_DIR}/jenkins.yaml"
+# keep the untouched export (outside bundle/, so no helper script modifies it) to diff against the cleaned one
+mkdir -p "${WORK_DIR}/original"
+cp "${BUNDLE_DIR}/jenkins.yaml" "${WORK_DIR}/original/jenkins.yaml"
 
-# 2. run the plugin export groovy script on the source controller (script console)
+# 2./3. run an inline groovy script on the source controller (script console); it prints the plugins.yaml content
 echo "⬇️  Exporting plugin list from $SRC_URL"
 GROOVY_FILE="${WORK_DIR}/plugins-export.groovy"
-# Inline groovy: prints one "- id: <shortName>" line per installed plugin
 cat > "$GROOVY_FILE" <<'GROOVY'
 import jenkins.model.Jenkins
 
+println "plugins:"
 Jenkins.instance.pluginManager.plugins
   .collect { it.shortName }
   .sort()
   .each { println "- id: ${it}" }
 GROOVY
 curl_auth "$SRC_USER" "$SRC_TOKEN" -X POST "${SRC_URL}/scriptText" \
-  --data-urlencode "script@${GROOVY_FILE}" -o "${WORK_DIR}/plugins-export.txt"
-
-# 3. transform the export into a valid plugins.yaml
-#    Accepts either "- id: foo" lines or plain plugin ids, one per line (anything else is ignored).
-IDS_FILE="${WORK_DIR}/plugin-ids.txt"
-sed -nE 's/^[[:space:]]*-[[:space:]]*id:[[:space:]]*"?([A-Za-z0-9._-]+)"?[[:space:]]*$/\1/p' \
-  "${WORK_DIR}/plugins-export.txt" | sort -u > "$IDS_FILE"
-if [[ ! -s "$IDS_FILE" ]]; then
-  { grep -E '^[A-Za-z0-9._-]+$' "${WORK_DIR}/plugins-export.txt" || true; } | sort -u > "$IDS_FILE"
-fi
-[[ -s "$IDS_FILE" ]] || { echo "❌ no plugins found in export, see ${WORK_DIR}/plugins-export.txt" >&2; exit 1; }
-{
-  echo "plugins:"
-  while IFS= read -r id; do echo "- id: ${id}"; done < "$IDS_FILE"
-} > "${BUNDLE_DIR}/plugins.yaml"
-echo "🔌 $(wc -l < "$IDS_FILE" | tr -d ' ') plugins exported"
+  --data-urlencode "script@${GROOVY_FILE}" -o "${BUNDLE_DIR}/plugins.yaml"
+grep -q '^- id: ' "${BUNDLE_DIR}/plugins.yaml" \
+  || { echo "❌ no plugins found in export, see ${BUNDLE_DIR}/plugins.yaml" >&2; exit 1; }
+echo "🔌 $(grep -c '^- id: ' "${BUNDLE_DIR}/plugins.yaml") plugins exported"
 
 # 4./5. fix indent, clean jenkins.yaml, drop suspended plugins (run from the helpers dir: transform path is relative)
 (
@@ -197,7 +176,6 @@ YAML
 for f in bundle.yaml jenkins.yaml plugins.yaml; do
   yq e '.' "${BUNDLE_DIR}/${f}" >/dev/null || { echo "❌ invalid YAML: $f" >&2; exit 1; }
 done
-(cd "$BUNDLE_DIR" && zip -q -FS ../bundle.zip bundle.yaml jenkins.yaml plugins.yaml)
 # Start a throwaway CloudBees CI controller via runTestController.sh.
 # The generated bundle is mounted into it, so the controller loads it on startup.
 TEST_CONTAINER=""
@@ -216,34 +194,26 @@ trap stop_test_controller EXIT
 
 TEST_LOG=""
 if [[ "$START_TEST_CONTROLLER" == "true" ]]; then
-  command -v docker >/dev/null || { echo "❌ missing tool: docker" >&2; exit 1; }
   TEST_DIR="${WORK_DIR}/test-controller"
   TEST_LOG="${TEST_DIR}/tmp.log"   # runTestController.sh tees the controller log to ./tmp.log
   mkdir -p "$TEST_DIR"
-  TEST_JENKINS_HOME="${TEST_JENKINS_HOME:-${TEST_DIR}/jenkins_home}"
-  # The test controller has no Operations Center, so validate an OC-free copy of the bundle:
-  # local security realm with a random admin password, no RBAC strategy. The real bundle stays untouched.
-  command -v openssl >/dev/null || { echo "❌ missing tool: openssl" >&2; exit 1; }
+  # The test controller has no Operations Center, so it loads an OC-free copy of the bundle
+  # (local admin realm from patches/jenkins_securityrealm.yaml, no RBAC strategy). The real bundle stays untouched.
   TEST_BUNDLE_DIR="${WORK_DIR}/test-bundle"
   mkdir -p "$TEST_BUNDLE_DIR" "${WORK_DIR}/test-helpers" "${WORK_DIR}/patches"
   cp -R "${BUNDLE_DIR}/." "$TEST_BUNDLE_DIR/"
   cp "${HELPERS_DIR}/001-jenkinsYamlDisableOC.sh" "${WORK_DIR}/test-helpers/"
   cp "${SCRIPT_DIR}/patches/jenkins_securityrealm.yaml" "${WORK_DIR}/patches/"
-  export TEST_ADMIN_PASSWORD="$(openssl rand -hex 12)"
-  # drop the user "properties" of the shared patch: newer controllers reject some of them (e.g. apiToken)
-#   yq -i '.local.users[0].password = strenv(TEST_ADMIN_PASSWORD) | del(.local.users[0].properties)' \
-#     "${WORK_DIR}/patches/jenkins_securityrealm.yaml"
   cat > "${WORK_DIR}/test-helpers/.env" <<ENV
 CASC_BUNDLES_PATH=${TEST_BUNDLE_DIR}
 JENKINS_YAML=jenkins.yaml
 PLUGINS_YAML=plugins.yaml
 ENV
   (cd "${WORK_DIR}/test-helpers" && ./001-jenkinsYamlDisableOC.sh)
-  (cd "$TEST_BUNDLE_DIR" && zip -q -FS ../test-bundle.zip bundle.yaml jenkins.yaml plugins.yaml)
   echo "🚀 Starting test controller (cloudbees-core-${TEST_CI_TYPE}:${TEST_CI_VERSION}) on port ${TEST_PORT}"
   (cd "$TEST_DIR" && "${SCRIPT_DIR}/runTestController.sh" \
       -v "$TEST_CI_VERSION" -t "$TEST_CI_TYPE" \
-      -j "$TEST_JENKINS_HOME" -c "$TEST_BUNDLE_DIR" -p "127.0.0.1:${TEST_PORT}:8080" \
+      -j "${TEST_DIR}/jenkins_home" -c "$TEST_BUNDLE_DIR" -p "127.0.0.1:${TEST_PORT}:8080" \
       -n "$TEST_CONTAINER_NAME" > run.log 2>&1) &
   LAUNCH_PID=$!
   TEST_URL="http://localhost:${TEST_PORT}"
@@ -277,22 +247,12 @@ ENV
 fi
 
 
-# if [[ -n "$TEST_CONTAINER" ]]; then
-#   echo "🔎 Validating bundle on $TEST_URL"
-#   curl_auth admin "$TEST_ADMIN_PASSWORD" -X POST -H "Content-Type: application/zip" \
-#     --data-binary "@${WORK_DIR}/test-bundle.zip" "${TEST_URL}/casc-bundle-mgnt/casc-bundle-validate" \
-#     | tee "${WORK_DIR}/validation.json"
-#   echo
-#   if command -v jq >/dev/null && jq -e '.valid == false' "${WORK_DIR}/validation.json" >/dev/null 2>&1; then
-#     echo "❌ bundle validation failed, see ${WORK_DIR}/validation.json" >&2
-#     exit 1
-#   fi
-# fi
-
 # 9. apply: intentionally not automated
 cat <<MSG
 
-✅ Bundle ready: ${BUNDLE_DIR}  (zip: ${WORK_DIR}/bundle.zip)
+✅ Bundle ready: ${BUNDLE_DIR}
+Original export of the source controller: ${WORK_DIR}/original/jenkins.yaml
+  diff: diff ${WORK_DIR}/original/jenkins.yaml ${BUNDLE_DIR}/jenkins.yaml
 Review jenkins.yaml (secrets, removed sections), then apply it yourself:
   - copy ${BUNDLE_DIR} into the CasC bundle location of the target controller (e.g. the OC bundle repo), or
   - upload it through the CloudBees CI UI.

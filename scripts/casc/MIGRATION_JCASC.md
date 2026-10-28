@@ -14,8 +14,8 @@ Two scripts in this directory:
 
 ## Prerequisites
 
-- `curl`, `yq` (v4, the repo README asks for 4.30), `zip`
-- `docker` (only when a test controller is started), `jq` (optional, used to read the validation result)
+- `curl`, `yq` (v4, the repo README asks for 4.30)
+- `docker` (only when a test controller is started)
 - A user and API token on the source controller that may call `/configuration-as-code/export` and `/scriptText` (administer permission)
 
 ## Configuration
@@ -29,7 +29,6 @@ The migration script reads `scripts/casc/.env` (git-ignored) and falls back to e
 | `TEST_CI_VERSION` | `latest` | Image tag of `cloudbees/cloudbees-core-<type>` |
 | `TEST_CI_TYPE` | `mm` | Image type (`mm` = managed controller) |
 | `TEST_PORT` | `9080` | Host port mapped to 8080 |
-| `TEST_JENKINS_HOME` | `<WORK_DIR>/test-controller/jenkins_home` | Jenkins home of the test controller |
 | `TEST_CONTAINER_NAME` | `casc-migration-test` | Docker container name, used to find and stop it |
 | `TEST_STARTUP_TIMEOUT` | `300` | Seconds to wait until the test controller answers |
 | `KEEP_TEST_CONTROLLER` | `false` | Keep the test controller running after the script (same as `--keep-controller`) |
@@ -56,7 +55,7 @@ cp .env.template .env      # then edit
 | Option | Meaning |
 | --- | --- |
 | `--keep-controller` | Leave the test controller running after the script. Default: it is stopped. Overrides `KEEP_TEST_CONTROLLER` from `.env` |
-| `-y`, `--yes` | Do not ask before stopping an already running test controller and deleting its Jenkins home. Required when there is no terminal |
+| `-y`, `--yes` | Do not ask before stopping an already running test controller. Required when there is no terminal |
 | `-h`, `--help` | Show the options |
 
 Result in `$WORK_DIR`:
@@ -64,12 +63,9 @@ Result in `$WORK_DIR`:
 ```
 bundle/bundle.yaml    apiVersion "2", id, version, jcasc + plugins references
 bundle/jenkins.yaml   exported and cleaned JCasC config
+original/jenkins.yaml unchanged export from the source controller, for diffing against bundle/jenkins.yaml
 bundle/plugins.yaml   installed plugins (suspended ones removed)
-bundle.zip            zipped bundle, as sent to the validation endpoint
-plugins-export.txt    raw output of the plugin export
-validation.json       response of the validate call (only when the validation block is enabled)
 test-bundle/          copy of bundle/ without Operations Center settings, mounted into the test controller
-test-bundle.zip       zip of test-bundle/
 test-controller/      run.log, tmp.log (controller log), jenkins_home/
 ```
 
@@ -80,10 +76,10 @@ test-controller/      run.log, tmp.log (controller log), jenkins_home/
 | 0 | Wipe and recreate `WORK_DIR`; copy the helper scripts and write a helper `.env` pointing at the work dir |
 | 1 | `POST <SRC_URL>/configuration-as-code/export` writes `jenkins.yaml` |
 | 2 | Run an inline groovy script via `<SRC_URL>/scriptText`; it prints `- id: <plugin>` per installed plugin |
-| 3 | Parse the output into `plugins.yaml` (`plugins:` list, de-duplicated) |
+| 3 | The groovy output is already the `plugins.yaml` content (`plugins:` list); the script checks it contains plugins |
 | 4/5 | Run `scripts/00-indent2Yaml.sh`, `01-jenkinsYamlClean.sh` (removes the paths listed in `transform.yaml`), `02-pluginsRemoveSuspended.sh` |
 | 6/7 | Write `bundle.yaml` directly as `apiVersion: "2"` |
-| 8 | Check the YAML with `yq`, zip the bundle, start the test controller (if needed), validate |
+| 8 | Check the YAML with `yq`, start the test controller, wait for it and scan its log for bundle errors |
 | 9 | Not automated. The script prints how to apply the bundle |
 
 ```mermaid
@@ -104,20 +100,20 @@ sequenceDiagram
     M->>M: build plugins.yaml
     M->>H: indent fix, clean jenkins.yaml, remove suspended plugins
     H-->>M: bundle files updated in place
-    M->>M: write bundle.yaml (apiVersion 2), yq syntax check, zip
-    M->>T: start, wait, validate
-    T-->>M: validation result
+    M->>M: write bundle.yaml (apiVersion 2), yq syntax check
+    M->>T: start, wait, scan log
+    T-->>M: bundle loaded or errors in log
     M-->>U: bundle ready, apply manually
 ```
 
-## Test controller and validation
+## Test controller and bundle check
 
 If `START_TEST_CONTROLLER=true` (the default), the script starts a throwaway controller with `runTestController.sh`.
 
-**Before the work dir is wiped**, the script checks for a running container named `TEST_CONTAINER_NAME`, for example one kept alive by an earlier `--keep-controller` run. If it finds one, it prints the container's Jenkins home and asks `Stop it and delete its Jenkins home for a fresh start? [y/N]`.
+**Before the work dir is wiped**, the script checks for a running container named `TEST_CONTAINER_NAME`, for example one kept alive by an earlier `--keep-controller` run. If it finds one, it asks `Stop it and delete its Jenkins home for a fresh start? [y/N]`.
 
 - `n` (or Enter): the script aborts and changes nothing.
-- `y`, or `--yes`: it stops the container and deletes the Jenkins home. It deletes only a home that lies under `WORK_DIR` or equals `TEST_JENKINS_HOME`. Any other path is left alone with a warning.
+- `y`, or `--yes`: it stops the container. The old Jenkins home lives inside `WORK_DIR` (`test-controller/jenkins_home`) and is deleted by the work dir wipe that follows.
 - No terminal and no `--yes`: the script exits with an error.
 
 **Operations Center-free copy.** The test controller has no Operations Center, so the script copies `bundle/` to `test-bundle/` and runs `scripts/001-jenkinsYamlDisableOC.sh` on the copy. That replaces `securityRealm` with a local `admin` realm (from `patches/jenkins_securityrealm.yaml`), removes `authorizationStrategy` and removes the OC agent cloud entry. The real `bundle/` keeps its OC settings. The test controller mounts `test-bundle/`, and the port is bound to `127.0.0.1` only.
@@ -127,8 +123,7 @@ Then the script:
 1. Waits for the named container, and fails early if `runTestController.sh` exits first (the last 20 lines of `run.log` are printed).
 2. Waits until `<url>/login` answers 200, 401 or 403, up to `TEST_STARTUP_TIMEOUT` seconds.
 3. Greps the controller log for bundle errors (`SEVERE` lines mentioning casc/bundle, or "Failed to load/apply ... bundle"). The patterns are a guess at the log wording (*unverified*).
-4. Validation call: `POST /casc-bundle-mgnt/casc-bundle-validate` with `test-bundle.zip` (*unverified* on a standalone controller). **This block is currently commented out in the script.** When enabled, it logs in as `admin` with `TEST_ADMIN_PASSWORD`. The line that sets that random password is also commented out, so the admin password is the placeholder from the patch file until you re-enable it.
-5. On exit (EXIT trap, including failure): stops the container, or with `--keep-controller` leaves it running and prints the URL and `docker stop <name>`.
+4. On exit (EXIT trap, including failure): stops the container, or with `--keep-controller` leaves it running and prints the URL and `docker stop <name>`.
 
 ```mermaid
 sequenceDiagram
@@ -153,8 +148,6 @@ sequenceDiagram
         M->>C: GET /login
     end
     M->>M: grep tmp.log for bundle errors
-    M->>C: POST /casc-bundle-mgnt/casc-bundle-validate (bundle.zip)
-    C-->>M: validation result
     M->>D: docker stop (EXIT trap)
     D->>C: stop and remove (--rm)
 ```
@@ -208,11 +201,12 @@ sequenceDiagram
 
 ## Known limitations and things to review
 
-- **Apply is manual.** The script only builds and validates. Copy the bundle to the target's bundle location or upload it via the UI.
+- **Apply is manual.** The script only builds the bundle and checks that a test controller loads it. Copy the bundle to the target's bundle location or upload it via the UI.
 - **Review `jenkins.yaml` before use.** The JCasC export can contain secret references or environment-specific values. Only the paths in `transform.yaml` are removed.
 - **Plugin list is names only.** Versions are not pinned in `plugins.yaml`.
-- **Unverified assumptions:** the validate endpoint on a standalone controller, the log patterns, and the admin login. Check them on the first run and adjust.
+- **Unverified assumption:** the log patterns used to detect bundle errors. Check them on the first run and adjust.
+- **No API validation.** The `casc-bundle-validate` call was removed. The only checks are the `yq` syntax check, a successful startup and the log scan.
 - **The test controller loads the OC-free copy**, not your real bundle. Startup success shows the rest of the bundle loads, but it says nothing about the OC settings.
-- **Startup failures seen so far:** an empty `advisor: {}` section (now removed through `transform.yaml`) and user properties like `apiToken` in the shared security realm patch (rejected by newer controllers; the test copy of the patch drops them when the `yq` line in the script is active). Other empty `{}` sections may be rejected the same way.
+- **Startup failures seen so far:** an empty `advisor: {}` section (now removed through `transform.yaml`) and user properties like `apiToken` in the shared security realm patch (rejected by newer controllers; the patch file no longer contains them). Other empty `{}` sections may be rejected the same way.
 - **Cleanup.** The work dir is deleted at the start of each run, only if it is empty or carries the `.casc-migration-workdir` marker. On Linux, root-owned files from the container's jenkins_home may block the deletion.
-- **A running container** named `casc-migration-test` is handled by the prompt described above. A custom `TEST_JENKINS_HOME` outside `WORK_DIR` is only deleted together with a running container that uses it, so a stale one from a stopped container stays. If `docker run` still fails with a name conflict, run `docker rm -f casc-migration-test`.
+- **A running container** named `casc-migration-test` is handled by the prompt described above. If `docker run` still fails with a name conflict, run `docker rm -f casc-migration-test`.
