@@ -21,6 +21,7 @@ for jenkins_yaml in $(find $CASC_BUNDLES_PATH  -iname $JENKINS_YAML);do
       yq -i ".jenkins.securityRealm  = load(\"$SCRIPT_DIR/../patches/jenkins_securityrealm.yaml\")" $OUTPUT_FILE
       yq -i '.jenkins.clouds |= map(select(. != "operationsCenterAgentProvisioningService"))' $OUTPUT_FILE
       yq -i 'del(.jenkins.authorizationStrategy)' $OUTPUT_FILE
+      yq -i 'del(.credentials.operationsCenter)' $OUTPUT_FILE
       yq e --indent=2 --no-colors '.' "$OUTPUT_FILE" > tmp.yaml && mv tmp.yaml "$OUTPUT_FILE"
       cp -f $OUTPUT_FILE $jenkins_yaml
       echo "✅ Patch applied successfully to: $jenkins_yaml"

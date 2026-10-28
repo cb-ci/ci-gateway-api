@@ -10,3 +10,4 @@ cloudbees-core
 githubAppPrivkey.pem
 **/tmp
 /casc/cjoc-export*
+scripts/casc/tmpcascworkdir

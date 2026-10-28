@@ -14,6 +14,9 @@
     path: credentials.blueOcean
   - op: remove
     path: license
+  # empty advisor: {} makes the CloudBees Advisor configurator reject the bundle at startup
+  - op: remove
+    path: advisor
   - op: remove
     path: jenkins.myViewsTabBar
   - op: remove
