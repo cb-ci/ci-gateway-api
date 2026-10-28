@@ -8,6 +8,7 @@ Two scripts in this directory:
 | `runTestController.sh` | Starts a CloudBees CI controller in Docker with a CasC bundle mounted. Used by the migration script, also usable on its own. |
 
 **Terms**
+
 - **Source controller**: the old Jenkins OSS controller with the JCasC plugin.
 - **Target controller**: the new CloudBees CI controller that loads the bundle.
 
@@ -26,8 +27,7 @@ The migration script reads `scripts/casc/.env` (git-ignored) and falls back to e
 | Variable | Default | Meaning |
 | --- | --- | --- |
 | `SRC_URL`, `SRC_USER`, `SRC_TOKEN` | required | Source controller URL, user, API token |
-| `TGT_URL`, `TGT_USER`, `TGT_TOKEN` | empty | Existing target controller used for validation. If `TGT_URL` is empty, a test controller is started |
-| `START_TEST_CONTROLLER` | `true` | Start a local test controller when `TGT_URL` is empty |
+| `START_TEST_CONTROLLER` | `true` | Start a local test controller for the bundle check |
 | `TEST_CI_VERSION` | `latest` | Image tag of `cloudbees/cloudbees-core-<type>` |
 | `TEST_CI_TYPE` | `mm` | Image type (`mm` = managed controller) |
 | `TEST_PORT` | `9080` | Host port mapped to 8080 |
@@ -44,7 +44,6 @@ Example `.env` (placeholders only):
 SRC_URL=https://jenkins.example.com/jcasc-controller
 SRC_USER=your-user
 SRC_TOKEN=your-api-token
-TGT_URL=
 TEST_CI_VERSION=latest
 ```
 
@@ -70,7 +69,7 @@ bundle/jenkins.yaml   exported and cleaned JCasC config
 bundle/plugins.yaml   installed plugins (suspended ones removed)
 bundle.zip            zipped bundle, as sent to the validation endpoint
 plugins-export.txt    raw output of the plugin export
-validation.json       response of the validate call
+validation.json       response of the validate call (only when the validation block is enabled)
 test-bundle/          copy of bundle/ without Operations Center settings, mounted into the test controller
 test-bundle.zip       zip of test-bundle/
 test-controller/      run.log, tmp.log (controller log), jenkins_home/
@@ -115,9 +114,10 @@ sequenceDiagram
 
 ## Test controller and validation
 
-If `TGT_URL` is empty and `START_TEST_CONTROLLER=true`, the script starts a throwaway controller with `runTestController.sh`.
+If `START_TEST_CONTROLLER=true` (the default), the script starts a throwaway controller with `runTestController.sh`.
 
 **Before the work dir is wiped**, the script checks for a running container named `TEST_CONTAINER_NAME`, for example one kept alive by an earlier `--keep-controller` run. If it finds one, it prints the container's Jenkins home and asks `Stop it and delete its Jenkins home for a fresh start? [y/N]`.
+
 - `n` (or Enter): the script aborts and changes nothing.
 - `y`, or `--yes`: it stops the container and deletes the Jenkins home. It deletes only a home that lies under `WORK_DIR` or equals `TEST_JENKINS_HOME`. Any other path is left alone with a warning.
 - No terminal and no `--yes`: the script exits with an error.
@@ -129,7 +129,7 @@ Then the script:
 1. Waits for the named container, and fails early if `runTestController.sh` exits first (the last 20 lines of `run.log` are printed).
 2. Waits until `<url>/login` answers 200, 401 or 403, up to `TEST_STARTUP_TIMEOUT` seconds.
 3. Greps the controller log for bundle errors (`SEVERE` lines mentioning casc/bundle, or "Failed to load/apply ... bundle"). The patterns are a guess at the log wording (*unverified*).
-4. Validation call: `POST /casc-bundle-mgnt/casc-bundle-validate` with `test-bundle.zip` (*unverified* on a standalone controller). **This block is currently commented out in the script.** When enabled, it uses `TGT_USER`/`TGT_TOKEN`, otherwise `admin` with `TEST_ADMIN_PASSWORD`. The line that sets that random password is also commented out, so the admin password is the placeholder from the patch file until you re-enable it.
+4. Validation call: `POST /casc-bundle-mgnt/casc-bundle-validate` with `test-bundle.zip` (*unverified* on a standalone controller). **This block is currently commented out in the script.** When enabled, it logs in as `admin` with `TEST_ADMIN_PASSWORD`. The line that sets that random password is also commented out, so the admin password is the placeholder from the patch file until you re-enable it.
 5. On exit (EXIT trap, including failure): stops the container, or with `--keep-controller` leaves it running and prints the URL and `docker stop <name>`.
 
 ```mermaid
@@ -177,6 +177,7 @@ Starts `cloudbees/cloudbees-core-<type>:<version>` in the foreground and writes 
 Relative paths for `-j` and `-c` are converted to absolute paths, because Docker would otherwise read them as volume names.
 
 Notes:
+
 - The controller loads the bundle through `-Dcore.casc.config.bundle=/tmp/casc-bundle`. HA is disabled (`-Dcom.cloudbees.jenkins.ha=false`) and the update-center signature check is off (`noSignatureCheck=true`), so use it for tests only.
 - The container uses `--rm`, so it is removed when stopped.
 - The first run pulls the image, which can take a while.

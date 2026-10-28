@@ -20,9 +20,8 @@ set -euo pipefail
 
 # Configuration (from .env or environment variables, nothing is hardcoded):
 #   SRC_URL, SRC_USER, SRC_TOKEN   source controller (Jenkins OSS + JCasC), user + API token
-#   TGT_URL, TGT_USER, TGT_TOKEN   target controller (CloudBees CI), used for validation only (optional)
 #   KEEP_TEST_CONTROLLER           keep the test controller running after the script (default: false, see --keep-controller)
-#   START_TEST_CONTROLLER          start a local test controller (runTestController.sh) when TGT_URL is empty (default: true)
+#   START_TEST_CONTROLLER          start a local test controller (runTestController.sh) to check the bundle (default: true)
 #   TEST_CI_VERSION, TEST_CI_TYPE, TEST_JENKINS_HOME, TEST_PORT, TEST_STARTUP_TIMEOUT   test controller settings (default: latest, mm, 9080, 300)
 #   BUNDLE_ID                      bundle id (default: casc-controller)
 #   WORK_DIR                       work dir (default: ${TMPDIR:-/tmp}/casc-migration-workdir); wiped at the start of each run, kept after it
@@ -70,7 +69,6 @@ done
 : "${SRC_USER:?set SRC_USER}"
 : "${SRC_TOKEN:?set SRC_TOKEN (Jenkins API token)}"
 SRC_URL="${SRC_URL%/}"
-TGT_URL="${TGT_URL:-}"; TGT_URL="${TGT_URL%/}"
 
 for tool in curl yq zip; do
   command -v "$tool" >/dev/null || { echo "❌ missing tool: $tool" >&2; exit 1; }
@@ -91,7 +89,7 @@ case "$WORK_DIR" in
 esac
 # A test controller from a previous run (e.g. started with --keep-controller) holds the old jenkins_home.
 # Ask before stopping it and deleting that home, so the new run starts fresh.
-if [[ -z "$TGT_URL" && "$START_TEST_CONTROLLER" == "true" ]] \
+if [[ "$START_TEST_CONTROLLER" == "true" ]] \
    && command -v docker >/dev/null && docker info >/dev/null 2>&1 \
    && [[ -n "$(docker ps -q --filter "name=^${TEST_CONTAINER_NAME}$")" ]]; then
   OLD_HOME="$(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/var/jenkins_home"}}{{.Source}}{{end}}{{end}}' "$TEST_CONTAINER_NAME" 2>/dev/null || true)"
@@ -195,18 +193,19 @@ plugins:
   - "plugins.yaml"
 YAML
 
-# 8. validate: local syntax check, then the target's CasC bundle validation API (if TGT_* is set)
+# 8. validate: local syntax check, then start a test controller that loads the bundle
 for f in bundle.yaml jenkins.yaml plugins.yaml; do
   yq e '.' "${BUNDLE_DIR}/${f}" >/dev/null || { echo "❌ invalid YAML: $f" >&2; exit 1; }
 done
 (cd "$BUNDLE_DIR" && zip -q -FS ../bundle.zip bundle.yaml jenkins.yaml plugins.yaml)
-# Start a throwaway CloudBees CI controller via runTestController.sh when no TGT_URL is configured.
+# Start a throwaway CloudBees CI controller via runTestController.sh.
 # The generated bundle is mounted into it, so the controller loads it on startup.
 TEST_CONTAINER=""
+TEST_URL=""
 stop_test_controller() {
   [[ -n "$TEST_CONTAINER" ]] || return 0
   if [[ "$KEEP_TEST_CONTROLLER" == "true" ]]; then
-    echo "▶️  Test controller kept running: ${TGT_URL} (container ${TEST_CONTAINER_NAME}, user admin, see ${WORK_DIR}/patches/jenkins_securityrealm.yaml)"
+    echo "▶️  Test controller kept running: ${TEST_URL} (container ${TEST_CONTAINER_NAME}, user admin, see ${WORK_DIR}/patches/jenkins_securityrealm.yaml)"
     echo "   stop it with: docker stop ${TEST_CONTAINER_NAME}"
   else
     echo "🛑 Stopping test controller"
@@ -216,7 +215,7 @@ stop_test_controller() {
 trap stop_test_controller EXIT
 
 TEST_LOG=""
-if [[ -z "$TGT_URL" && "$START_TEST_CONTROLLER" == "true" ]]; then
+if [[ "$START_TEST_CONTROLLER" == "true" ]]; then
   command -v docker >/dev/null || { echo "❌ missing tool: docker" >&2; exit 1; }
   TEST_DIR="${WORK_DIR}/test-controller"
   TEST_LOG="${TEST_DIR}/tmp.log"   # runTestController.sh tees the controller log to ./tmp.log
@@ -247,7 +246,7 @@ ENV
       -j "$TEST_JENKINS_HOME" -c "$TEST_BUNDLE_DIR" -p "127.0.0.1:${TEST_PORT}:8080" \
       -n "$TEST_CONTAINER_NAME" > run.log 2>&1) &
   LAUNCH_PID=$!
-  TGT_URL="http://localhost:${TEST_PORT}"
+  TEST_URL="http://localhost:${TEST_PORT}"
 
   # wait until the named container exists (runTestController.sh runs docker in the foreground)
   for _ in $(seq 1 60); do
@@ -260,19 +259,15 @@ ENV
   done
   [[ -n "$TEST_CONTAINER" ]] || { echo "❌ test controller did not start, see ${TEST_DIR}/run.log" >&2; exit 1; }
 
-  echo "⏳ Waiting for ${TGT_URL} (max ${TEST_STARTUP_TIMEOUT}s)"
+  echo "⏳ Waiting for ${TEST_URL} (max ${TEST_STARTUP_TIMEOUT}s)"
   up=false
   for _ in $(seq 1 $((TEST_STARTUP_TIMEOUT / 5))); do
-    code="$(curl -s -o /dev/null -w '%{http_code}' "${TGT_URL}/login" || true)"
+    code="$(curl -s -o /dev/null -w '%{http_code}' "${TEST_URL}/login" || true)"
     if [[ "$code" == "200" || "$code" == "401" || "$code" == "403" ]]; then up=true; break; fi
     sleep 5
   done
   $up || { echo "❌ test controller not ready, see ${TEST_LOG}" >&2; exit 1; }
 
-  # use the local admin of the OC-free test bundle unless target credentials are configured
-  if [[ -z "${TGT_USER:-}" ]]; then
-    TGT_USER="admin"; TGT_TOKEN="$TEST_ADMIN_PASSWORD"
-  fi
   # a bundle that fails to load is reported in the controller log
   if grep -qiE 'SEVERE.*(casc|configuration-as-code|bundle)|Failed to (load|apply).*bundle' "$TEST_LOG"; then
     echo "❌ bundle errors in controller log: ${TEST_LOG}" >&2
@@ -282,20 +277,16 @@ ENV
 fi
 
 
-# VALIDATE_ZIP="${WORK_DIR}/bundle.zip"
-# [[ -n "$TEST_CONTAINER" ]] && VALIDATE_ZIP="${WORK_DIR}/test-bundle.zip"
-# if [[ -n "$TGT_URL" && -n "${TGT_USER:-}" && -n "${TGT_TOKEN:-}" ]]; then
-#   echo "🔎 Validating bundle on $TGT_URL"
-#   curl_auth "$TGT_USER" "$TGT_TOKEN" -X POST -H "Content-Type: application/zip" \
-#     --data-binary "@${VALIDATE_ZIP}" "${TGT_URL}/casc-bundle-mgnt/casc-bundle-validate" \
+# if [[ -n "$TEST_CONTAINER" ]]; then
+#   echo "🔎 Validating bundle on $TEST_URL"
+#   curl_auth admin "$TEST_ADMIN_PASSWORD" -X POST -H "Content-Type: application/zip" \
+#     --data-binary "@${WORK_DIR}/test-bundle.zip" "${TEST_URL}/casc-bundle-mgnt/casc-bundle-validate" \
 #     | tee "${WORK_DIR}/validation.json"
 #   echo
 #   if command -v jq >/dev/null && jq -e '.valid == false' "${WORK_DIR}/validation.json" >/dev/null 2>&1; then
 #     echo "❌ bundle validation failed, see ${WORK_DIR}/validation.json" >&2
 #     exit 1
 #   fi
-# else
-#   echo "⚠️  no target credentials available, skipped remote validation"
 # fi
 
 # 9. apply: intentionally not automated
