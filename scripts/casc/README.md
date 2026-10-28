@@ -2,6 +2,26 @@
 
 Helper scripts for cleaning up and transforming Jenkins Configuration as Code (CasC) bundles exported from CloudBees CI controllers, so they can be reused (for example for local development or a new controller setup).
 
+## Migrating a JCasC controller to a CloudBees CasC bundle
+
+`migrateJcasCController2CasCController.sh` builds a CloudBees CasC bundle from a Jenkins OSS controller that uses the JCasC plugin, and checks that a CloudBees CI controller can load it:
+
+1. Exports `jenkins.yaml` (JCasC export) and the installed plugin list from the source controller.
+2. Cleans the result with the helper scripts below (`00-indent2Yaml.sh`, `01-jenkinsYamlClean.sh`, `02-pluginsRemoveSuspended.sh`) and writes a `bundle.yaml` with `apiVersion: "2"`.
+3. Starts a throwaway CloudBees CI controller in Docker with `runTestController.sh`, mounts an Operations Center-free copy of the bundle and scans the startup log for bundle errors.
+4. Stops the controller (or keeps it running with `--keep-controller`). Applying the bundle to the real target controller is a manual step.
+
+```
+cp .env.template .env      # set SRC_URL, SRC_USER, SRC_TOKEN
+./migrateJcasCController2CasCController.sh [--keep-controller] [--yes]
+```
+
+The result is written to a work dir that is wiped at the start of every run (default `${TMPDIR:-/tmp}/casc-migration-workdir`). It also holds the unchanged export in `original/jenkins.yaml`, so you can diff it against the cleaned `bundle/jenkins.yaml`.
+
+All variables, options, step details and sequence diagrams are in [MIGRATION_JCASC.md](MIGRATION_JCASC.md). `runTestController.sh` can also be used on its own to start a controller with any bundle (`./runTestController.sh -c <bundle-dir>`, see `--help`).
+
+The sections below describe the helper scripts in `scripts/`. They can be used independently, for example on bundles exported from CloudBees CI.
+
 ## Tools
 
 The scripts require yq version 4.30
@@ -13,7 +33,10 @@ yq (https://github.com/mikefarah/yq/) version v4.30.5
 
 ## Setup
 
-Copy `scripts/.env.template` to `scripts/.env` and adjust it. Every script sources `scripts/.env`.
+There are two env files:
+
+- `.env` (copy of `.env.template`, in this directory): configuration of the migration script (source controller, test controller settings). Git-ignored, never commit tokens.
+- `scripts/.env` (copy of `scripts/.env.template`): configuration of the helper scripts in `scripts/`, described below. The migration script does not read it. It generates its own helper `.env` in the work dir and runs copies of the helper scripts there.
 
 | Variable | Purpose |
 | --- | --- |
@@ -24,25 +47,30 @@ Copy `scripts/.env.template` to `scripts/.env` and adjust it. Every script sourc
 | `PLUGINS_YAML` | File name of the plugins file (default `plugins.yaml`) |
 | `VAR_PREFIX` | Prefix for secret references (default `readFile:/var/run/secrets/controller/`) |
 
-Note: most scripts modify files in place under `CASC_BUNDLES_PATH`. Work on a copy or a clean git checkout.
+The helper scripts source `scripts/.env`. Most of them modify files in place under `CASC_BUNDLES_PATH`. Work on a copy or a clean git checkout.
 
 ## Layout
 
 ```
 casc/
+├── migrateJcasCController2CasCController.sh  # JCasC controller -> CasC bundle, checked on a test controller
+├── runTestController.sh  # starts a CloudBees CI controller in Docker with a CasC bundle mounted
+├── MIGRATION_JCASC.md    # documentation of the two scripts above
+├── .env.template         # configuration of the migration script (copy to .env)
 ├── patch.sh              # standalone one-off cleanup of a single jenkins.yaml
 ├── transform.yaml        # list of YAML paths removed by 01-jenkinsYamlClean.sh
 ├── patches/              # YAML snippets used by the scripts
 │   ├── jenkins_securityrealm.yaml
 │   └── jenkins_cloud_amazonEC2.yaml
-└── scripts/
+└── scripts/              # helper scripts, described below
 ```
 
 ## Files in the casc directory
 
+- `migrateJcasCController2CasCController.sh` and `runTestController.sh` - See [MIGRATION_JCASC.md](MIGRATION_JCASC.md).
 - `patch.sh [jenkins.yaml]` - Backs up the given file to `<file>.bak`, deletes a fixed set of keys (license, update center, operations center root action, credentials and similar), writes the result to `patched-jenkins.yaml` and prints a diff against the original. Standalone, does not use `.env`.
 - `transform.yaml` - List of `op: remove` entries with a `path` each (for example `unclassified.location`, `tool.go`). It holds the keys that are removed by `01-jenkinsYamlClean.sh`. Commented-out entries are for local development without an operations center.
-- `patches/jenkins_securityrealm.yaml` - Local security realm with an `admin` user. It replaces `jenkins.securityRealm` in `001-jenkinsYamlDisableOC.sh`. The password is a placeholder (`XXX`), change it.
+- `patches/jenkins_securityrealm.yaml` - Local security realm with an `admin` user. It replaces `jenkins.securityRealm` in `001-jenkinsYamlDisableOC.sh`, which the migration script also uses for the test controller. The password is a placeholder (`XXX`), change it if the controller is reachable by others.
 - `patches/jenkins_cloud_amazonEC2.yaml` - Placeholder values (`TODO-...`) for the required fields of the Amazon EC2 cloud. See `scripts/YQ_README.md` for how it is merged.
 
 ## Scripts
