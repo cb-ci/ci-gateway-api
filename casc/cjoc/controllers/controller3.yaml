@@ -3,7 +3,7 @@ removeStrategy:
   items: NONE
 items:
   - kind: managedController
-    name: controller1
+    name: controller3
     configuration:
       kubernetes:
         allowExternalAgents: false
@@ -24,13 +24,13 @@ items:
         disk: 50
         readinessFailureThreshold: 3
         livenessTimeoutSeconds: 10
-        domain: controller1
+        domain: controller3
         livenessPeriodSeconds: 10
         startupTimeoutSeconds: 5
         startupInitialDelaySeconds: 30
         javaOptions: -XshowSettings:vm -XX:+AlwaysPreTouch -XX:+DisableExplicitGC -XX:+ParallelRefProcEnabled -XX:+UseStringDeduplication -XX:+AlwaysActAsServerClassMachine -Dhudson.slaves.NodeProvisioner.initialDelay=0 -XX:-OmitStackTraceInFastThrow
     description: ''
-    displayName: controller1-casc-scm-retriever
+    displayName: controller3-casc-scm-retriever
     properties:
       - customWebhookData: {}
       - sharedHeaderLabelOptIn:
