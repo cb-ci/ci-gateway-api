@@ -1,0 +1,311 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$ref": "#/definitions/items",
+    "definitions": {
+        "items": {
+            "title": "items",
+            "type": "object",
+            "additionalProperties": false,
+            "patternProperties": {
+                "^x-.*$": {
+                    "$comment": "We allow extra properties starting with x- to allow anchors usage",
+                    "type": [
+                        "number",
+                        "string",
+                        "boolean",
+                        "object",
+                        "array",
+                        "null"
+                    ]
+                }
+            },
+            "required": [
+                "items"
+            ],
+            "properties": {
+                "removeStrategy": {
+                    "$ref": "#/definitions/removeStrategy",
+                    "description": "Not required, as it can also be defined in bundle.yaml"
+                },
+                "items": {
+                    "$ref": "#/definitions/items-array"
+                },
+                "root": {
+                    "type": "string"
+                }
+            }
+        },
+        "items-array": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+                "$ref": "#/definitions/item"
+            }
+        },
+        "removeStrategy": {
+            "title": "removeStrategy",
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "items",
+                "rbac"
+            ],
+            "properties": {
+                "items": {
+                    "enum": [
+                        "NONE",
+                        "none",
+                        "SYNC",
+                        "sync",
+                        "REMOVE_SUPPORTED",
+                        "remove_supported",
+                        "REMOVE-SUPPORTED",
+                        "remove-supported",
+                        "REMOVE_ALL",
+                        "remove_all",
+                        "REMOVE-ALL",
+                        "remove-all"
+                    ]
+                },
+                "rbac": {
+                    "enum": [
+                        "SYNC",
+                        "sync",
+                        "UPDATE",
+                        "update"
+                    ]
+                }
+            }
+        },
+        "item": {
+            "title": "item",
+            "type": "object",
+            "additionalProperties": true,
+            "required": [
+                "kind",
+                "name"
+            ],
+            "properties": {
+                "kind": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "items": {
+                    "$ref": "#/definitions/items-array"
+                },
+                "groups": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/group"
+                    }
+                },
+                "filteredRoles": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "minItems": 1
+                },
+                "serviceAccounts": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/serviceAccount"
+                    }
+                }
+            }
+        },
+        "group": {
+            "title": "groups",
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "name"
+            ],
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "members": {
+                    "$ref": "#/definitions/groupMembers"
+                },
+                "roles": {
+                    "$ref": "#/definitions/groupRoles"
+                }
+            }
+        },
+        "groupMembers": {
+            "title": "Members in group",
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "users": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "serviceAccounts": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "external_groups": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "internal_groups": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "unknown": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "groupRoles": {
+            "title": "Roles in group",
+            "type": "array",
+            "items": {
+                "$ref": "#/definitions/groupRole"
+            }
+        },
+        "groupRole": {
+            "type": "object",
+            "title": "Role in group",
+            "additionalProperties": false,
+            "required": [
+                "name"
+            ],
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "grantedAt": {
+                    "type": "string"
+                },
+                "propagates": {
+                    "anyOf": [
+                        {
+                            "enum": [
+                                "true",
+                                "TRUE",
+                                "false",
+                                "FALSE"
+                            ]
+                        },
+                        {
+                            "type": "boolean"
+                        }
+                    ]
+                }
+            }
+        },
+        "serviceAccount": {
+            "type": "object",
+            "title": "Service Account",
+            "additionalProperties": false,
+            "required": [
+                "name"
+            ],
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "authentication": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "type": {
+                                "enum": [
+                                    "password",
+                                    "oidc"
+                                ]
+                            }
+                        },
+                        "allOf": [
+                            {
+                                "if": {
+                                    "properties": {
+                                        "type": {
+                                            "const": "password"
+                                        }
+                                    }
+                                },
+                                "then": {
+                                    "additionalProperties": false,
+                                    "required": [
+                                        "type",
+                                        "id"
+                                    ],
+                                    "properties": {
+                                        "type": {
+                                            "const": "password"
+                                        },
+                                        "id": {
+                                            "type": "string"
+                                        },
+                                        "description": {
+                                            "type": "string"
+                                        },
+                                        "password": {
+                                            "type": "string"
+                                        },
+                                        "expiration": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            },
+                            {
+                                "if": {
+                                    "properties": {
+                                        "type": {
+                                            "const": "oidc"
+                                        }
+                                    }
+                                },
+                                "then": {
+                                    "additionalProperties": false,
+                                    "required": [
+                                        "type",
+                                        "id",
+                                        "issuer",
+                                        "subject"
+                                    ],
+                                    "properties": {
+                                        "type": {
+                                            "const": "oidc"
+                                        },
+                                        "id": {
+                                            "type": "string"
+                                        },
+                                        "issuer": {
+                                            "type": "string"
+                                        },
+                                        "subject": {
+                                            "type": "string"
+                                        },
+                                        "audience": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        ]
+                    }
+                }
+            }
+        }
+    }
+}

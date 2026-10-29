@@ -9,5 +9,5 @@ gke_gcloud_auth_plugin_cache
 cloudbees-core
 githubAppPrivkey.pem
 **/tmp
-/casc/cjoc-export*
+/casc/cjoc-tmp*
 scripts/casc/tmpcascworkdir
