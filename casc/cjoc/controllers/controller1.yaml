@@ -38,7 +38,7 @@ items:
       - healthReporting:
           enabled: true
       - owner:
-          delay: 5
+          delay: 1
           owners: ''
       - envelopeExtension:
           allowExceptions: false
