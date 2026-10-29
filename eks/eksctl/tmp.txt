@@ -1,0 +1,1 @@
+claude mcp add ci-mcp-router https://ci.acaternberg.aws.ps.beescloud.com/controller1/mcp --transport http --header "Authorization: Basic c2E6Y2xvdWRiZWVzX2NpX3NhX2FiYzQ1NGUyNDMxMjEzMWY1NTZjNTc4NTlkMjRmZjE3Cg=="
