@@ -200,7 +200,7 @@ agent pods will stay `Pending` indefinitely.
 | 03 | [`03-installClusterAutoscaler.sh`](03-installClusterAutoscaler.sh) | Installs Kubernetes Cluster Autoscaler via Helm using the IRSA ServiceAccount eksctl created (`wellKnownPolicies.autoScaler`), matches the image tag to the cluster's live Kubernetes minor version, and verifies both node groups' ASGs are tagged for auto-discovery (automatic since `minSize != maxSize` on `controllers`/`agents`). Also grants supplemental read-only RBAC on the `resource.k8s.io` API group (Dynamic Resource Allocation objects), which newer autoscaler builds watch unconditionally but the Helm chart's bundled ClusterRole doesn't grant. Independent of the ALB/Envoy chain — run any time after [`01-createCluster.sh`](01-createCluster.sh). |
 | 04 | [`04-installEnvoy.sh`](04-installEnvoy.sh) | Installs Envoy Gateway, requests/validates the ACM certificate for `CJOC_HOST_NAME` (with automated Route53 DNS validation), and creates the Gateway/GatewayClass/HTTPRoute plumbing plus the `cjoc-alb` Ingress that provisions the **shared internet-facing ALB**. |
 | 04 | [`04-deleteEnvoy.sh`](04-deleteEnvoy.sh) | Tears down the Ingress (deprovisioning the ALB), Gateway API resources, and the Envoy Gateway Helm release. Leaves the CloudBees namespace, CRDs, and ACM certificate in place unless `--delete-crds` / `--delete-cert` are passed. |
-| 05 | [`05-installCloudBees.sh`](05-installCloudBees.sh) | Installs CloudBees CI (Operations Center / CJOC) via the `cloudbees/cloudbees-core` Helm chart, wired to the Gateway from step 04, and waits for the Gateway to get an address. |
+| 05 | [`05-installCloudBees.sh`](05-installCloudBees.sh) | Installs CloudBees CI (Operations Center / CJOC) via the `cloudbees/cloudbees-core` Helm chart, wired to the Gateway from step 04, and waits for the Gateway to get an address. Optional parts are switched on in `.env` (`CASC_ENABLED`, `S3_LOGS_ENABLED`, `CHANNEL_PINGER_ENABLED`, `MCP_ENABLED`; see [MCP Router](#mcp-router-optional)). |
 | 05 | [`05-deleteCloudBees.sh`](05-deleteCloudBees.sh) | Uninstalls the CloudBees CI Helm release and associated resources. |
 | 06 | [`06-installExternalDNS.sh`](06-installExternalDNS.sh) | Installs `external-dns` (via EKS Pod Identity) scoped to a least-privilege, hosted-zone-specific IAM policy, so Route53 A records for `CJOC_HOST_NAME` are created/kept in sync automatically from the Ingress. |
 | 07 | [`07-createEC2WithController.sh`](07-createEC2WithController.sh) | **Optional add-on.** Provisions a standalone Amazon Linux 2023 EC2 instance (Java 21 + Docker + systemd-managed CloudBees CI Client Controller container) and wires it into the *same shared ALB* from step 04 via a new host-header listener rule, its own ACM certificate (SNI), a dedicated target group/security group/IAM instance profile, and a Route53 alias record — without creating a second ALB. Also adds a scoped 443 rule to the EKS cluster's own security group so this instance can reach the Kubernetes API server (needed because `clusterEndpoints.privateAccess: true` routes in-VPC clients through that security group, not the public endpoint). |
@@ -208,6 +208,21 @@ agent pods will stay `Pending` indefinitely.
 | 07 | [`07-stopEC2Instance.sh`](07-stopEC2Instance.sh) | Stops (does not terminate) the EC2 Client Controller instance to park it and save EC2 compute cost, leaving its security group, IAM role, target group, listener rule, ACM cert, Route53 record, and EBS volume untouched. Waits for `stopped` by default (`--no-wait`, `--yes`). |
 | 07 | [`07-startEC2Instance.sh`](07-startEC2Instance.sh) | Starts a previously stopped EC2 Client Controller instance back up so the target group reports healthy again. Waits for `running` by default (`--no-wait`, `--yes`). |
 | 08 | [`08-createServiceAccountforRemoteAgents.sh`](08-createServiceAccountforRemoteAgents.sh) | Creates a `jenkins-agent` ServiceAccount, Role, and RoleBinding in the `cbci-builds` namespace (get/list/watch/create/delete/update/patch on pods, pods/log, pods/exec, events, and PVCs), plus a non-expiring legacy-style Secret token, and prints the decoded token — used to configure a Jenkins Kubernetes Cloud (e.g. from a remote/standalone Controller) so it can provision agent pods in this cluster. |
+
+## MCP Router (optional)
+
+Set `MCP_ENABLED=true` in `.env` before running `05-installCloudBees.sh` to deploy the CloudBees CI MCP Router with OAuth through the `cloudbees-core` chart (`McpRouter.enabled`, `OperationsCenter.OAuthServer.Enabled`, upstream mode `AUTO`). Background, auth flow and chart values are in [`MCP.md`](MCP.md).
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `MCP_ENABLED` | `false` | Deploy the router and enable the OAuth authorization server. |
+| `MCP_UPSTREAM_MODE` | `AUTO` | `AUTO` accepts OAuth bearer tokens and Basic/API-token headers. `OAUTH_ONLY` rejects everything but bearer tokens. |
+| `MCP_RATE_LIMIT_ENABLED` | `false` | Per-caller rate limiting on `/mcp`. Optional `MCP_RATE_LIMIT_PERMITS` and `MCP_RATE_LIMIT_WINDOW`. |
+| `MCP_CONTROLLERS_CACHE_TTL` | router default (`1H`) | How long the router caches the controller list (`H`, `M`, `S` suffix). |
+
+The router is served through the Gateway at `https://<CJOC_HOST_NAME>/mcp-router/mcp`.
+
+**Prerequisite:** the MCP Server plugin must be on the controllers, and the OAuth Authorization Server plugin on the operations center and the OAuth Resource Server plugin on the controllers (`OAUTH_ONLY` needs the last one everywhere). The `casc/` bundles install them: `cloudbees-oauth-server` and `cloudbees-oauth-resource` in `casc/cjoc/plugins.yaml`, `mcp-server` and `cloudbees-oauth-resource` in `casc/controller-base/plugins.yaml`. The retriever reads the bundles from `CASC_SCM_REPO`/`CASC_SCM_BRANCH`, so commit and push them first.
 
 ## Architecture
 

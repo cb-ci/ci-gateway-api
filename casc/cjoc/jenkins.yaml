@@ -67,12 +67,12 @@ cloudBeesCasCServer:
   visibility: true
 #https://$(HOSTNAME}/cjoc/manage/masterProvisioning/, Configure Controller Provisioning -> Container images            
 masterprovisioning:
-  dockerImageDefinitionConfiguration:
-    images:
-    - imageTag: "${controllerImageTagCurrentVersion}"
-      name: "${controllerImageNameCurrent}"
-    - imageTag: "${controllerImageTagPreviousVersion}"
-      name: "${controllerImageNamePrevious}"
+  # dockerImageDefinitionConfiguration:
+  #   images:
+  #   - imageTag: "${controllerImageTagCurrentVersion}"
+  #     name: "${controllerImageNameCurrent}"
+  #   - imageTag: "${controllerImageTagPreviousVersion}"
+  #     name: "${controllerImageNamePrevious}"
   kubernetes:
     clusterEndpoints:
     - id: "default"

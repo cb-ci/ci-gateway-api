@@ -17,6 +17,12 @@
 #      volumes unless --delete-data is given: stop the compute, preserve the
 #      data.
 #
+# MCP ROUTER (MCP_ENABLED=true in 05-installCloudBees.sh)
+#   The router Deployment, Service, ServiceAccount, oauth-config ConfigMap and its
+#   HTTPRoutes are all part of the Helm release, so `helm uninstall` removes them and
+#   no extra step is needed. A user-created signing-key Secret (privateKeyJwt) is not
+#   managed by the chart; delete it yourself if you made one.
+#
 # WHAT THIS DOES NOT DELETE
 #   - The Gateway, GatewayClass, EnvoyProxy or the ALB. Those belong to
 #     04-installEnvoy.sh — use 04-deleteEnvoy.sh.
@@ -117,7 +123,7 @@ if [[ -n "$PVCS" ]]; then
 fi
 
 echo "Will delete:"
-echo "    - Helm release ${RELEASE_NAME} (CJOC, HTTPRoute, RBAC, ConfigMaps)"
+echo "    - Helm release ${RELEASE_NAME} (CJOC, HTTPRoute, RBAC, ConfigMaps; MCP Router and its routes if MCP_ENABLED was set)"
 if [[ "$KEEP_CONTROLLERS" != true && -n "$MANAGED_CONTROLLERS" ]]; then
   echo "    - Managed controller StatefulSets listed above (volumes kept)"
 fi

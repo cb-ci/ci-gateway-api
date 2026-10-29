@@ -12,6 +12,12 @@
 #   CHANNEL_PINGER_ENABLED=true    -Dhudson.slaves.ChannelPinger.pingIntervalSeconds
 #                                  on the operations center and managed controllers;
 #                                  CHANNEL_PINGER_INTERVAL_SECONDS (default 1200)
+#   MCP_ENABLED=true               CloudBees CI MCP Router + OAuth authorization server
+#                                  (McpRouter.enabled, OperationsCenter.OAuthServer.Enabled,
+#                                  upstream mode AUTO). Needs the MCP Server plugin and the
+#                                  OAuth Authorization/Resource Server plugins; see MCP.md.
+#                                  Optional: MCP_RATE_LIMIT_ENABLED (+ _PERMITS, _WINDOW),
+#                                  MCP_CONTROLLERS_CACHE_TTL
 #   HELM_DEBUG=true                helm --debug
 # Replaces 05a-installCloudBees-CasCBundleRetriever.sh and
 # 05c-installCloudBees-PlugableStorage.sh.
@@ -103,6 +109,39 @@ if [[ "${S3_LOGS_ENABLED:-false}" == "true" ]]; then
   log "Pluggable storage enabled (S3)."
 fi
 
+# --- Optional: MCP Router with OAuth (MCP_ENABLED=true) ---
+# Chart serves the router through the Gateway at https://<CJOC_HOST_NAME>/mcp-router/mcp.
+# AUTO accepts OAuth bearer tokens and existing Basic/API-token headers; move to
+# OAUTH_ONLY (MCP_UPSTREAM_MODE) once every controller has the OAuth Resource Server plugin.
+MCP_ARGS=()
+if [[ "${MCP_ENABLED:-false}" == "true" ]]; then
+  MCP_ARGS=(
+    --set OperationsCenter.OAuthServer.Enabled=true
+    --set McpRouter.enabled=true
+    --set McpRouter.upstreamMode="${MCP_UPSTREAM_MODE:-AUTO}"
+  )
+
+  # Router tuning goes in as env vars via McpRouter.extraEnv. --set-string keeps
+  # values such as "true" from being turned into booleans.
+  MCP_ENV_INDEX=0
+  add_mcp_env() {
+    MCP_ARGS+=(
+      --set "McpRouter.extraEnv[${MCP_ENV_INDEX}].name=$1"
+      --set-string "McpRouter.extraEnv[${MCP_ENV_INDEX}].value=$2"
+    )
+    MCP_ENV_INDEX=$((MCP_ENV_INDEX + 1))
+  }
+
+  if [[ "${MCP_RATE_LIMIT_ENABLED:-false}" == "true" ]]; then
+    add_mcp_env MCP_RATE_LIMIT_ENABLED true
+    [[ -n "${MCP_RATE_LIMIT_PERMITS:-}" ]] && add_mcp_env MCP_RATE_LIMIT_PERMITS "${MCP_RATE_LIMIT_PERMITS}"
+    [[ -n "${MCP_RATE_LIMIT_WINDOW:-}" ]]  && add_mcp_env MCP_RATE_LIMIT_WINDOW "${MCP_RATE_LIMIT_WINDOW}"
+  fi
+  [[ -n "${MCP_CONTROLLERS_CACHE_TTL:-}" ]] && add_mcp_env MCP_ROUTER_OC_CONTROLLERS_CACHE_TTL "${MCP_CONTROLLERS_CACHE_TTL}"
+
+  log "MCP Router enabled (upstream mode ${MCP_UPSTREAM_MODE:-AUTO})."
+fi
+
 HELM_DEBUG_ARGS=()
 [[ "${HELM_DEBUG:-false}" == "true" ]] && HELM_DEBUG_ARGS=(--debug)
 
@@ -129,6 +168,7 @@ helm upgrade --install cloudbees-core-envoy cloudbees/cloudbees-core \
   --set Common.image.tag='latest' \
   ${CASC_ARGS[@]+"${CASC_ARGS[@]}"} \
   ${PLUGGABLE_STORAGE_ARGS[@]+"${PLUGGABLE_STORAGE_ARGS[@]}"} \
+  ${MCP_ARGS[@]+"${MCP_ARGS[@]}"} \
   ${HELM_DEBUG_ARGS[@]+"${HELM_DEBUG_ARGS[@]}"}
 
  # --set Agents.ImagePullSecrets=<secret> \
@@ -158,6 +198,10 @@ if [[ -n "$GATEWAY_IP" ]]; then
     log "External IP: ${GATEWAY_IP}"
     log "Operations Center URL: https://${CJOC_HOST_NAME}/cjoc/"
     log "Post-install: Update your DNS A record for ${CJOC_HOST_NAME} to ${GATEWAY_IP}"
+    if [[ "${MCP_ENABLED:-false}" == "true" ]]; then
+      log "MCP Router endpoint: https://${CJOC_HOST_NAME}/mcp-router/mcp"
+      log "MCP requires the MCP Server and OAuth plugins on CJOC/controllers (see MCP.md)."
+    fi
 else
     echo ""
     error "Timed out waiting for Gateway External IP. Check 'kubectl get gateway -n ${NAMESPACE_CLOUDBEES}' and ensure a LoadBalancer IP is assigned."
