@@ -16,9 +16,6 @@ plugins:
   - id: jackson3-api # cap src
   - id: jquery3-api # cap src
   - id: oauth-credentials # cap src
-  # MCP Router + OAuth (eks/eksctl/MCP.md): authorization server and resource server on the operations center
-  - id: cloudbees-oauth-server # src
-  - id: cloudbees-oauth-resource # src
   - id: operations-center-jnlp-controller # cap src
   - id: operations-center-rbac # cap src
   - id: operations-center-webhooks # cap src

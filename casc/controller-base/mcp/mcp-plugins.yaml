@@ -1,0 +1,6 @@
+---
+# MCP Router + OAuth on every controller (see eks/eksctl/MCP.md)
+# The authorization server plugin (cloudbees-oauth-server) belongs on the operations center only.
+plugins:
+  - id: mcp-server # src; /mcp-server/stateless endpoint the router calls
+  - id: cloudbees-oauth-resource # src; validates the exchanged token

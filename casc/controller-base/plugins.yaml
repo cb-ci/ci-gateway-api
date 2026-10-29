@@ -28,8 +28,4 @@ plugins:
   - id: operations-center-cloud # cap src
   - id: workflow-aggregator # cap src
   - id: workflow-cps-checkpoint # cap src
-  # MCP Router + OAuth (eks/eksctl/MCP.md): MCP endpoint and OAuth resource server on every controller
-  - id: mcp-server # src
-  - id: cloudbees-oauth-resource # src
-  - id: cloudbees-oauth-server
   - id: beer

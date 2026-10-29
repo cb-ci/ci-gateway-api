@@ -1,0 +1,28 @@
+# MCP endpoint protection on every controller (see eks/eksctl/MCP.md)
+#
+# trustedIssuer is not set here: connected controllers get it from the operations center
+# (authorization server "enforceTrustedIssuer: false" seeds it only when empty). To pin it in the bundle add
+#   trustedIssuer: "https://<gateway-host>/cjoc/oauth-server"
+# which must match the authorization server issuer exactly.
+security:
+  oauthAuthorizationServer:
+    accessTokenTtlSeconds: 600
+    autoApproveSeededClients: false
+    clientAssertionClockSkewSeconds: 30
+    clientAssertionMaxLifetimeSeconds: 300
+    dcrEnabled: false
+    dcrRefreshTokenTtlSeconds: 2592000
+    dcrSecretTtlSeconds: 15552000
+    enforceTrustedIssuer: false
+    exchangedTokenTtlSeconds: 300
+    idleEvictionEnabled: true
+    idleEvictionTtlSeconds: 7776000
+    jwksCacheTtlSeconds: 300
+    rootRegisterCompat: false
+  oauthResourceServer:
+    clockSkewSeconds: 60
+    filterMode: AUTO
+    jwksCacheTtlSeconds: 300
+    jwksUrl: "http://cjoc/cjoc/oauth-server/jwks"
+    protectedPaths: "/mcp-server/*"
+    trustedIssuer: "https://ci.acaternberg.aws.ps.beescloud.com/cjoc/oauth-server"

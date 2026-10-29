@@ -1,0 +1,88 @@
+# CloudBees CI MCP Router: OAuth authorization server, resource server and OAuth clients (see eks/eksctl/MCP.md)
+#
+# Needs these env vars on the operations center (cjoc-casc-envvars ConfigMap, 05-installCloudBees.sh):
+#   GATEWAY_DOMAIN         public host name, e.g. ci.example.com
+#   MCP_ALLOWED_AUDIENCES  one audience URL per line: https://<GATEWAY_DOMAIN>/cjoc plus every controller
+#                          (https://<GATEWAY_DOMAIN>/<controller-url-path>). The router requests all of them in one
+#                          token exchange, so one missing entry fails the whole call (invalid_target).
+#
+# Client secrets are deliberately not set here. Do not commit encrypted secrets exported from a running OC.
+
+#https://${GATEWAY_DOMAIN}/cjoc/manage/configureSecurity/, Security -> CloudBees OAuth Authorization Server / Resource Server
+
+#Example for allowed audiences ${MCP_ALLOWED_AUDIENCES}
+#  allowedAudiences:
+#  - "https://ci.acaternberg.aws.ps.beescloud.com/controller2"
+#  - "https://ci.acaternberg.aws.ps.beescloud.com/controller1"
+#  - "https://ci.acaternberg.aws.ps.beescloud.com/controller3"
+#  - "https://ci.acaternberg.aws.ps.beescloud.com/cjoc"
+#  allowedAudiencesRaw: |-
+#    https://ci.acaternberg.aws.ps.beescloud.com/controller2
+#    https://ci.acaternberg.aws.ps.beescloud.com/controller1
+#    https://ci.acaternberg.aws.ps.beescloud.com/controller3
+#    https://ci.acaternberg.aws.ps.beescloud.com/cjoc
+
+security:
+  oauthAuthorizationServer:
+    issuer: "https://${GATEWAY_DOMAIN}/cjoc/oauth-server"
+    # in-cluster JWKS, avoids hairpin NAT through the gateway
+    internalJwksUrl: "http://cjoc/cjoc/oauth-server/jwks"
+    # global allow-list; must also contain everything in the per-client lists below
+    allowedAudiences: "${MCP_ALLOWED_AUDIENCES}"
+    accessTokenTtlSeconds: 600
+    exchangedTokenTtlSeconds: 300
+    # skips the consent prompt for the two seeded clients; set to false to require approval on first use
+    autoApproveSeededClients: true
+    dcrEnabled: false
+    enforceTrustedIssuer: false
+    clientAssertionClockSkewSeconds: 30
+    clientAssertionMaxLifetimeSeconds: 300
+    jwksCacheTtlSeconds: 300
+    idleEvictionEnabled: true
+    idleEvictionTtlSeconds: 7776000
+    dcrRefreshTokenTtlSeconds: 2592000
+    dcrSecretTtlSeconds: 15552000
+    rootRegisterCompat: false
+  oauthResourceServer:
+    trustedIssuer: "https://${GATEWAY_DOMAIN}/cjoc/oauth-server"
+    filterMode: AUTO
+    protectedPaths: "/mcp-server/*"
+    clockSkewSeconds: 60
+    jwksCacheTtlSeconds: 300
+
+# Pre-seeded clients, declared so their per-client allowedAudiences are kept in the bundle.
+# NOTE: this adds a second credentials.system.domainCredentials fragment next to credentials.yaml (gh-user-token);
+# validate the merge on the operations center before relying on it.
+
+credentials:
+  system:
+    domainCredentials:
+      - credentials:
+          # confidential client the router uses for token exchange (the chart gives it a projected service account token)
+          - jenkinsOAuthClient:
+              id: "cloudbees-mcp-router"
+              description: "CloudBees CI MCP Router"
+              scope: SYSTEM
+              grantTokenExchange: true
+              tokenEndpointAuthMethod: CLIENT_SECRET_BASIC
+              audience: "https://${GATEWAY_DOMAIN}/mcp-router"
+              allowedAudiences: "${MCP_ALLOWED_AUDIENCES}" # not sure if required since we have allowedAudiencesRaw
+              allowedAudiencesRaw: "${MCP_ALLOWED_AUDIENCES}"
+          # public PKCE client MCP agents (Claude Code: --client-id ci-mcp-client) sign in with; no token exchange,
+          # so it carries no allowedAudiences of its own
+          - jenkinsOAuthClient:
+              id: "ci-mcp-client"
+              description: "CloudBees CI MCP Public Client"
+              scope: SYSTEM
+              grantAuthorizationCode: true
+              grantRefreshToken: true
+              pkceRequired: true
+              tokenEndpointAuthMethod: NONE              
+              audience: "https://${GATEWAY_DOMAIN}/mcp-router"
+              allowedAudiences: "${MCP_ALLOWED_AUDIENCES}" # not sure if required since we have allowedAudiencesRaw
+              allowedAudiencesRaw: "${MCP_ALLOWED_AUDIENCES}"
+              redirectUrisRaw: |-
+                http://127.0.0.1/callback
+                http://[::1]/callback
+                http://localhost/callback
+        domain: {}
