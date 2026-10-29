@@ -119,6 +119,8 @@ if [[ "${MCP_ENABLED:-false}" == "true" ]]; then
     --set OperationsCenter.OAuthServer.Enabled=true
     --set McpRouter.enabled=true
     --set McpRouter.upstreamMode="${MCP_UPSTREAM_MODE:-AUTO}"
+    --set McpRouter.resources.requests.cpu=500m 
+    --set McpRouter.resources.requests.memory=1Gi
   )
 
   # Router tuning goes in as env vars via McpRouter.extraEnv. --set-string keeps

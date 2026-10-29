@@ -31,4 +31,5 @@ plugins:
   # MCP Router + OAuth (eks/eksctl/MCP.md): MCP endpoint and OAuth resource server on every controller
   - id: mcp-server # src
   - id: cloudbees-oauth-resource # src
+  - id: cloudbees-oauth-server
   - id: beer
