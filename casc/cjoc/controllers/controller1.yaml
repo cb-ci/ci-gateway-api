@@ -14,7 +14,7 @@ items:
         #     replicas: 1
         #     targetCPUUtilizationPercentage: 80
         terminationGracePeriodSeconds: 30
-        image: ${controllerImageNamePrevious}
+        image: ${controllerImageNameCurrent}
         memory: 3072
         startupPeriodSeconds: 10
         storageClassName: ${CONTROLLER_STORAGE_CLASS}
