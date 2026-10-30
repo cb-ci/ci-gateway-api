@@ -121,6 +121,33 @@ printf '%s\n' "$STATE" | jq '.' > "$STATE_FILE"
 success "Saved current sizes to ${STATE_FILE}"
 
 # =============================================================================
+# 2b. PAUSE CLUSTER-AUTOSCALER
+#   Left running, it sees the Pending pods created by the scale-down (or by
+#   --drain) and raises desiredSize again, undoing everything below. Its prior
+#   replica count is saved next to the state file for 01-scaleUpNodePools.sh.
+# =============================================================================
+CA_FILE="${STATE_FILE}.autoscaler"
+if command -v kubectl >/dev/null 2>&1; then
+  CA_DEPLOY=$(kubectl get deploy -n kube-system \
+    -l app.kubernetes.io/instance=cluster-autoscaler \
+    -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
+  if [[ -n "$CA_DEPLOY" ]]; then
+    CA_REPLICAS=$(kubectl get deploy "$CA_DEPLOY" -n kube-system -o jsonpath='{.spec.replicas}')
+    # Never record 0: a re-run would otherwise overwrite the real value.
+    if [[ "${CA_REPLICAS:-0}" -gt 0 ]]; then
+      printf '%s %s\n' "$CA_DEPLOY" "$CA_REPLICAS" > "$CA_FILE"
+    fi
+    log "Scaling ${CA_DEPLOY} to 0 so it cannot scale the pools back up..."
+    kubectl scale deploy "$CA_DEPLOY" -n kube-system --replicas=0 >/dev/null
+    kubectl rollout status "deploy/${CA_DEPLOY}" -n kube-system --timeout=60s >/dev/null 2>&1 || true
+  else
+    warn "no cluster-autoscaler deployment found — assuming it is not installed."
+  fi
+else
+  warn "kubectl not found — cannot pause cluster-autoscaler; it may undo the scale-down."
+fi
+
+# =============================================================================
 # 3. OPTIONAL DRAIN
 # =============================================================================
 if [[ "$DRAIN" == true ]]; then
@@ -128,10 +155,14 @@ if [[ "$DRAIN" == true ]]; then
   log "Cordoning and draining nodes..."
   # --force is required: with every node going away there is nowhere to
   # reschedule, so eviction would otherwise block indefinitely.
+  # --disable-eviction deletes pods directly (still honouring the grace period)
+  # instead of going through the eviction API: PodDisruptionBudgets such as
+  # coredns and metrics-server can never be satisfied while every node is
+  # cordoned, and would stall each node for the full --timeout.
   for node in $(kubectl get nodes -o name 2>/dev/null || true); do
     log "  ${node}"
     kubectl drain "$node" \
-      --ignore-daemonsets --delete-emptydir-data --force \
+      --ignore-daemonsets --delete-emptydir-data --force --disable-eviction \
       --grace-period=60 --timeout=180s || warn "  drain of ${node} did not complete"
   done
   success "Nodes drained."
@@ -160,19 +191,35 @@ if [[ "$WAIT" == true ]]; then
   for ng in $NODEGROUPS; do
     printf '  %s ' "$ng"
     for _ in $(seq 1 60); do
-      STATUS=$(aws eks describe-nodegroup --cluster-name "$CLUSTER_NAME" \
+      # ACTIVE alone is not proof: right after the update call the status can
+      # still read ACTIVE before it flips to UPDATING, so check desiredSize too.
+      read -r STATUS DESIRED < <(aws eks describe-nodegroup --cluster-name "$CLUSTER_NAME" \
         --nodegroup-name "$ng" --region "$AWS_REGION" \
-        --query 'nodegroup.status' --output text 2>/dev/null || echo UNKNOWN)
-      [[ "$STATUS" == "ACTIVE" ]] && break
+        --query '[nodegroup.status, nodegroup.scalingConfig.desiredSize]' --output text \
+        2>/dev/null || echo "UNKNOWN -1")
+      [[ "$STATUS" == "ACTIVE" && "$DESIRED" == "0" ]] && break
       printf '.'
       sleep 10
     done
-    echo " ${STATUS}"
+    echo " ${STATUS} desired=${DESIRED}"
+    [[ "$DESIRED" == "0" ]] || error "${ng} did not reach desiredSize 0 (now ${DESIRED}); something is scaling it back up"
   done
+
+  if command -v kubectl >/dev/null 2>&1; then
+    log "Waiting for nodes to disappear..."
+    for _ in $(seq 1 30); do
+      N=$(kubectl get nodes --no-headers 2>/dev/null | wc -l | tr -d ' ')
+      [[ "$N" == "0" ]] && break
+      printf '.'
+      sleep 10
+    done
+    echo
+    [[ "$N" == "0" ]] || warn "${N} node(s) still registered; instances may still be terminating."
+  fi
 fi
 
 echo
-success "All node groups scaled to zero."
+success "Scale-down requested; node groups at desiredSize 0."
 echo
 echo "Verify:"
 echo "  aws eks list-nodegroups --cluster-name ${CLUSTER_NAME} --region ${AWS_REGION}"

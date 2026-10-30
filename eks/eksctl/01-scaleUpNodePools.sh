@@ -140,6 +140,16 @@ for entry in "${PLAN[@]}"; do
 done
 success "Scale-up requested for all node groups."
 
+# Restore cluster-autoscaler if 01-scaleDonwNodePools.sh paused it.
+CA_FILE="${STATE_FILE}.autoscaler"
+if [[ -f "$CA_FILE" ]] && command -v kubectl >/dev/null 2>&1; then
+  read -r CA_DEPLOY CA_REPLICAS < "$CA_FILE"
+  log "Restoring ${CA_DEPLOY} to ${CA_REPLICAS} replica(s)..."
+  kubectl scale deploy "$CA_DEPLOY" -n kube-system --replicas="$CA_REPLICAS" >/dev/null \
+    && rm -f "$CA_FILE" \
+    || warn "could not restore ${CA_DEPLOY}; run: kubectl scale deploy ${CA_DEPLOY} -n kube-system --replicas=${CA_REPLICAS}"
+fi
+
 # =============================================================================
 # 4. WAIT
 # =============================================================================
