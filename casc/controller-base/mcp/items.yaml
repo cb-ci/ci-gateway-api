@@ -23,11 +23,7 @@ items:
     name: 01-always-fail
     description: "SIM 01: always fails with the same registry error"
     displayName: "01 Always fail"
-    properties:
-    - folderVisibility:
-        groups:
-        - name: developers
-          grantedAt: current
+
     definition:
       cpsFlowDefinition:
         sandbox: true
@@ -68,11 +64,7 @@ items:
     name: 02-flaky
     description: "SIM 02: fails roughly 40% of the time, cron every 10 min"
     displayName: "02 Flaky"
-    properties:
-    - folderVisibility:
-        groups:
-        - name: developers
-          grantedAt: current
+
     definition:
       cpsFlowDefinition:
         sandbox: true
@@ -115,11 +107,6 @@ items:
     name: 03-slow-pod-start
     description: "SIM 03: init container delays the agent by ~90s"
     displayName: "03 Slow pod start"
-    properties:
-    - folderVisibility:
-        groups:
-        - name: developers
-          grantedAt: current
     definition:
       cpsFlowDefinition:
         sandbox: true
@@ -156,11 +143,7 @@ items:
     name: 04-queue-pressure
     description: "SIM 04: N parallel pods with CPU/memory requests"
     displayName: "04 Queue pressure"
-    properties:
-    - folderVisibility:
-        groups:
-        - name: developers
-          grantedAt: current
+
     definition:
       cpsFlowDefinition:
         sandbox: true
@@ -214,11 +197,7 @@ items:
     name: 05-oomkilled
     description: "SIM 05: 64Mi limit, 200M allocation"
     displayName: "05 OOMKilled"
-    properties:
-    - folderVisibility:
-        groups:
-        - name: developers
-          grantedAt: current
+
     definition:
       cpsFlowDefinition:
         sandbox: true
@@ -258,11 +237,7 @@ items:
     name: 06-bad-image
     description: "SIM 06: non-existent image tag, 3 min timeout"
     displayName: "06 Bad image"
-    properties:
-    - folderVisibility:
-        groups:
-        - name: developers
-          grantedAt: current
+
     definition:
       cpsFlowDefinition:
         sandbox: true
@@ -299,11 +274,7 @@ items:
     name: 07-risky-patterns
     description: "SIM 07: privileged, Docker socket, latest tag, curl | sh text"
     displayName: "07 Risky patterns"
-    properties:
-    - folderVisibility:
-        groups:
-        - name: developers
-          grantedAt: current
+
     definition:
       cpsFlowDefinition:
         sandbox: true
