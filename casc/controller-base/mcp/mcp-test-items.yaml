@@ -1,6 +1,6 @@
 removeStrategy:
   rbac: SYNC
-  items: REMOVE
+  items: REMOVE-SUPPORTED
 items:
 - kind: folder
   name: mcp-test-pipeline
