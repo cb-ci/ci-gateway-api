@@ -2,7 +2,7 @@ removeStrategy:
   rbac: SYNC
   items: NONE
 items:
- - kind: folder
+- kind: folder
   name: mcp-test-pipeline
   description: ''
   displayName: MCP test pipeline
@@ -19,32 +19,6 @@ items:
   - itemRestrictions:
       filter: false
   items:
-  - kind: pipeline
-    name: example
-    description: ""
-    displayName: "Hello World Pipeline"
-    properties:
-    - folderVisibility:
-        groups:
-        - name: developers
-          grantedAt: current
-    actions:
-    - buildHistory:
-        maxItems: 25
-    sources:
-    - sscm: []
-    definition:
-      pipeline:
-        agent:
-          docker:
-            image: docker:28.0.3-alpine
-            args: '-u root'
-        stages:
-        - name: "build"
-          steps:
-          - shell: |
-              print("Hello from Jenkins!")
-              print("This is a simple test pipeline to verify the setup.")
   - kind: pipeline
     name: 01-always-fail
     description: "SIM 01: always fails with the same registry error"
