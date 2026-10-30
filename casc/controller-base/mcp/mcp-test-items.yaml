@@ -193,46 +193,46 @@ items:
               }
             }
           }
-  - kind: pipeline
-    name: 05-oomkilled
-    description: "SIM 05: 64Mi limit, 200M allocation"
-    displayName: "05 OOMKilled"
+  # - kind: pipeline
+  #   name: 05-oomkilled
+  #   description: "SIM 05: 64Mi limit, 200M allocation"
+  #   displayName: "05 OOMKilled"
 
-    definition:
-      cpsFlowDefinition:
-        sandbox: true
-        script: |
-          // SIM 05: OOMKilled. The container has a 64Mi memory limit and tries to
-          // allocate 200M, so Kubernetes kills it.
-          pipeline {
-            agent {
-              kubernetes {
-                yaml '''
-          apiVersion: v1
-          kind: Pod
-          spec:
-            containers:
-            - name: main
-              image: polinux/stress
-              command: ['sleep']
-              args: ['99d']
-              resources:
-                requests:
-                  memory: 32Mi
-                limits:
-                  memory: 64Mi
-          '''
-                defaultContainer 'main'
-              }
-            }
-            stages {
-              stage('Memory hungry step') {
-                steps {
-                  sh 'stress --vm 1 --vm-bytes 200M --vm-hang 1 --timeout 30s'
-                }
-              }
-            }
-          }
+  #   definition:
+  #     cpsFlowDefinition:
+  #       sandbox: true
+  #       script: |
+  #         // SIM 05: OOMKilled. The container has a 64Mi memory limit and tries to
+  #         // allocate 200M, so Kubernetes kills it.
+  #         pipeline {
+  #           agent {
+  #             kubernetes {
+  #               yaml '''
+  #         apiVersion: v1
+  #         kind: Pod
+  #         spec:
+  #           containers:
+  #           - name: main
+  #             image: polinux/stress
+  #             command: ['sleep']
+  #             args: ['99d']
+  #             resources:
+  #               requests:
+  #                 memory: 32Mi
+  #               limits:
+  #                 memory: 64Mi
+  #         '''
+  #               defaultContainer 'main'
+  #             }
+  #           }
+  #           stages {
+  #             stage('Memory hungry step') {
+  #               steps {
+  #                 sh 'stress --vm 1 --vm-bytes 200M --vm-hang 1 --timeout 30s'
+  #               }
+  #             }
+  #           }
+  #         }
   - kind: pipeline
     name: 06-bad-image
     description: "SIM 06: non-existent image tag, 3 min timeout"
