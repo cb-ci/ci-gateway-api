@@ -1,0 +1,380 @@
+removeStrategy:
+  rbac: SYNC
+  items: NONE
+items:
+ - kind: folder
+  name: mcp-test-pipeline
+  description: ''
+  displayName: MCP test pipeline
+  groups:
+  - name: developers
+    members:
+      users:
+      - dev1
+    roles:
+    - name: develop
+      grantedAt: current
+  properties:
+  - envVars: {}
+  - itemRestrictions:
+      filter: false
+  items:
+  - kind: pipeline
+    name: example
+    description: ""
+    displayName: "Hello World Pipeline"
+    properties:
+    - folderVisibility:
+        groups:
+        - name: developers
+          grantedAt: current
+    actions:
+    - buildHistory:
+        maxItems: 25
+    sources:
+    - sscm: []
+    definition:
+      pipeline:
+        agent:
+          docker:
+            image: docker:28.0.3-alpine
+            args: '-u root'
+        stages:
+        - name: "build"
+          steps:
+          - shell: |
+              print("Hello from Jenkins!")
+              print("This is a simple test pipeline to verify the setup.")
+  - kind: pipeline
+    name: 01-always-fail
+    description: "SIM 01: always fails with the same registry error"
+    displayName: "01 Always fail"
+    properties:
+    - folderVisibility:
+        groups:
+        - name: developers
+          grantedAt: current
+    definition:
+      cpsFlowDefinition:
+        sandbox: true
+        script: |
+          // SIM 01: Always fails with the same error message.
+          // Create the same job on 2+ controllers to test "same error across controllers".
+          pipeline {
+            agent {
+              kubernetes {
+                yaml '''
+          apiVersion: v1
+          kind: Pod
+          spec:
+            containers:
+            - name: main
+              image: alpine:3.20
+              command: ['sleep']
+              args: ['99d']
+          '''
+                defaultContainer 'main'
+              }
+            }
+            stages {
+              stage('Build') {
+                steps { sh 'echo "Building..."; sleep 5' }
+              }
+              stage('Push image') {
+                steps {
+                  sh '''
+                    echo "ERROR: failed to push to registry registry.example.internal: 401 Unauthorized (expired credential)"
+                    exit 1
+                  '''
+                }
+              }
+            }
+          }
+  - kind: pipeline
+    name: 02-flaky
+    description: "SIM 02: fails roughly 40% of the time, cron every 10 min"
+    displayName: "02 Flaky"
+    properties:
+    - folderVisibility:
+        groups:
+        - name: developers
+          grantedAt: current
+    definition:
+      cpsFlowDefinition:
+        sandbox: true
+        script: |
+          // SIM 02: Flaky job, fails roughly 40% of the time.
+          pipeline {
+            agent {
+              kubernetes {
+                yaml '''
+          apiVersion: v1
+          kind: Pod
+          spec:
+            containers:
+            - name: main
+              image: alpine:3.20
+              command: ['sleep']
+              args: ['99d']
+          '''
+                defaultContainer 'main'
+              }
+            }
+            triggers { cron('H/10 * * * *') }
+            stages {
+              stage('Unit tests') {
+                steps {
+                  sh '''
+                    echo "Running tests..."
+                    sleep 10
+                    if [ $(( $(od -An -N1 -tu1 /dev/urandom) % 10 )) -lt 4 ]; then
+                      echo "FLAKY: test_checkout_timeout failed (connection reset)"
+                      exit 1
+                    fi
+                    echo "All tests passed"
+                  '''
+                }
+              }
+            }
+          }
+  - kind: pipeline
+    name: 03-slow-pod-start
+    description: "SIM 03: init container delays the agent by ~90s"
+    displayName: "03 Slow pod start"
+    properties:
+    - folderVisibility:
+        groups:
+        - name: developers
+          grantedAt: current
+    definition:
+      cpsFlowDefinition:
+        sandbox: true
+        script: |
+          // SIM 03: Slow pod start. An init container delays the agent by ~90s,
+          // simulating a heavy image or slow init step.
+          pipeline {
+            agent {
+              kubernetes {
+                yaml '''
+          apiVersion: v1
+          kind: Pod
+          spec:
+            initContainers:
+            - name: slow-init
+              image: alpine:3.20
+              command: ['sh', '-c', 'echo "warming up..."; sleep 90']
+            containers:
+            - name: main
+              image: alpine:3.20
+              command: ['sleep']
+              args: ['99d']
+          '''
+                defaultContainer 'main'
+              }
+            }
+            stages {
+              stage('Work') {
+                steps { sh 'echo "Agent finally started"; sleep 10' }
+              }
+            }
+          }
+  - kind: pipeline
+    name: 04-queue-pressure
+    description: "SIM 04: N parallel pods with CPU/memory requests"
+    displayName: "04 Queue pressure"
+    properties:
+    - folderVisibility:
+        groups:
+        - name: developers
+          grantedAt: current
+    definition:
+      cpsFlowDefinition:
+        sandbox: true
+        script: |
+          // SIM 04: Queue pressure. Starts N pods in parallel, each requesting
+          // real CPU/memory. Queue waits only appear if your cluster, node group
+          // or Kubernetes cloud "container cap" is reached.
+          // Increase PODS (or run this job several times at once) to force waiting.
+          def podYaml = '''
+          apiVersion: v1
+          kind: Pod
+          spec:
+            containers:
+            - name: main
+              image: alpine:3.20
+              command: ['sleep']
+              args: ['99d']
+              resources:
+                requests:
+                  cpu: "1"
+                  memory: 1Gi
+          '''
+
+          pipeline {
+            agent none
+            parameters {
+              string(name: 'PODS', defaultValue: '8', description: 'Number of parallel pods')
+            }
+            stages {
+              stage('Fan out') {
+                steps {
+                  script {
+                    def branches = [:]
+                    for (int i = 1; i <= params.PODS.toInteger(); i++) {
+                      def n = i
+                      branches["pod-${n}"] = {
+                        podTemplate(yaml: podYaml) {
+                          node(POD_LABEL) {
+                            container('main') { sh "echo pod ${n} running; sleep 120" }
+                          }
+                        }
+                      }
+                    }
+                    parallel branches
+                  }
+                }
+              }
+            }
+          }
+  - kind: pipeline
+    name: 05-oomkilled
+    description: "SIM 05: 64Mi limit, 200M allocation"
+    displayName: "05 OOMKilled"
+    properties:
+    - folderVisibility:
+        groups:
+        - name: developers
+          grantedAt: current
+    definition:
+      cpsFlowDefinition:
+        sandbox: true
+        script: |
+          // SIM 05: OOMKilled. The container has a 64Mi memory limit and tries to
+          // allocate 200M, so Kubernetes kills it.
+          pipeline {
+            agent {
+              kubernetes {
+                yaml '''
+          apiVersion: v1
+          kind: Pod
+          spec:
+            containers:
+            - name: main
+              image: polinux/stress
+              command: ['sleep']
+              args: ['99d']
+              resources:
+                requests:
+                  memory: 32Mi
+                limits:
+                  memory: 64Mi
+          '''
+                defaultContainer 'main'
+              }
+            }
+            stages {
+              stage('Memory hungry step') {
+                steps {
+                  sh 'stress --vm 1 --vm-bytes 200M --vm-hang 1 --timeout 30s'
+                }
+              }
+            }
+          }
+  - kind: pipeline
+    name: 06-bad-image
+    description: "SIM 06: non-existent image tag, 3 min timeout"
+    displayName: "06 Bad image"
+    properties:
+    - folderVisibility:
+        groups:
+        - name: developers
+          grantedAt: current
+    definition:
+      cpsFlowDefinition:
+        sandbox: true
+        script: |
+          // SIM 06: Bad image. The tag does not exist, so the pod ends in
+          // ImagePullBackOff and the build waits for an agent until the timeout.
+          pipeline {
+            agent {
+              kubernetes {
+                yaml '''
+          apiVersion: v1
+          kind: Pod
+          spec:
+            containers:
+            - name: main
+              image: alpine:does-not-exist-999
+              command: ['sleep']
+              args: ['99d']
+          '''
+                defaultContainer 'main'
+              }
+            }
+            options {
+              // Includes agent provisioning time, so the build ends on its own.
+              timeout(time: 3, unit: 'MINUTES')
+            }
+            stages {
+              stage('Never reached') {
+                steps { sh 'echo "This will not run"' }
+              }
+            }
+          }
+  - kind: pipeline
+    name: 07-risky-patterns
+    description: "SIM 07: privileged, Docker socket, latest tag, curl | sh text"
+    displayName: "07 Risky patterns"
+    properties:
+    - folderVisibility:
+        groups:
+        - name: developers
+          grantedAt: current
+    definition:
+      cpsFlowDefinition:
+        sandbox: true
+        script: |
+          // SIM 07: Risky patterns that a security scan prompt should find.
+          // - privileged container
+          // - Docker socket mounted from the host
+          // - "latest" image tag
+          // - curl | sh pattern (only echoed, NOT executed)
+          // NOTE: Pod Security Admission may block privileged pods or hostPath mounts.
+          // A rejected pod is still a valid failed build to analyze.
+          pipeline {
+            agent {
+              kubernetes {
+                yaml '''
+          apiVersion: v1
+          kind: Pod
+          spec:
+            containers:
+            - name: main
+              image: alpine:latest
+              command: ['sleep']
+              args: ['99d']
+              securityContext:
+                privileged: true
+              volumeMounts:
+              - name: docker-sock
+                mountPath: /var/run/docker.sock
+            volumes:
+            - name: docker-sock
+              hostPath:
+                path: /var/run/docker.sock
+          '''
+                defaultContainer 'main'
+              }
+            }
+            stages {
+              stage('Risky steps') {
+                steps {
+                  sh '''
+                    echo "Simulated install step (not executed):"
+                    echo "curl -fsSL https://get.example.invalid/install.sh | sh"
+                    echo "Image tag used: alpine:latest"
+                  '''
+                }
+              }
+            }
+          }
