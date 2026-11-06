@@ -6,12 +6,12 @@
   },
   "controllers": {
     "minSize": 0,
-    "maxSize": 2,
-    "desiredSize": 2
+    "maxSize": 4,
+    "desiredSize": 4
   },
   "system": {
     "minSize": 0,
     "maxSize": 2,
-    "desiredSize": 1
+    "desiredSize": 2
   }
 }
