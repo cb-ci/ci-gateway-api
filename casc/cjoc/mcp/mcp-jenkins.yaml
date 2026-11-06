@@ -40,10 +40,7 @@ security:
     # in-cluster JWKS, avoids hairpin NAT through the gateway
     internalJwksUrl: "http://cjoc/cjoc/oauth-server/jwks"
     # global allow-list; must also contain everything in the per-client lists below
-    # allowedAudiences: |
-    #   ${mcp_audiences}
-    allowedAudiencesRaw: |
-      ${mcp_audiences}
+    allowedAudiences: "${mcp_audiences}"
     accessTokenTtlSeconds: 600
     exchangedTokenTtlSeconds: 300
     # skips the consent prompt for the two seeded clients; set to false to require approval on first use

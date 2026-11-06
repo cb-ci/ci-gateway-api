@@ -1,5 +1,5 @@
 variables:
-  - cascVersion: V5
+  - cascVersion: V6
   - controllerImageNameCurrent: "CloudBees CI - Managed Controller - latest"
   - controllerImageTagCurrentVersion: "cloudbees/cloudbees-core-mm:latest"
   - controllerImageNamePrevious: "CloudBees CI - Managed Controller - 2.568.3.37913"
