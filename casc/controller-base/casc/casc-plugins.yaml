@@ -1,0 +1,10 @@
+# Plugin Categories:
+#   cap - is this a CAP plugin?
+#   3rd - is this a 3rd party plugin?
+#   old - is this a deprecated plugin?
+#   bst - installed by default
+#   dep - installed as dependency
+#   src - used as a source plugin for this list
+plugins:
+  - id: cloudbees-casc-client # cap src
+  - id: cloudbees-casc-items-controller # cap src

@@ -1,12 +1,14 @@
 apiVersion: "2"
 id: "controller"
 description: "CasC bundle for controller"
-version: "2"
+version: "1"
 jcasc:
   - "jenkins.yaml"
+  - "casc/casc-jenkins.yaml"
   - "mcp/mcp-jenkins.yaml"
 plugins:
   - "plugins.yaml"
+  - "casc/casc-plugins.yaml"
   - "mcp/mcp-plugins.yaml"
 items:
   - "mcp/mcp-test-items.yaml"

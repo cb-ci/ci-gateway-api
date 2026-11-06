@@ -26,3 +26,4 @@ security:
     jwksUrl: "http://cjoc/cjoc/oauth-server/jwks"
     protectedPaths: "/mcp-server/*"
     trustedIssuer: "https://${GATEWAY_DOMAIN}/cjoc/oauth-server"
+anonymizeSupportBundle, apiToken, apiTokenProperty, contentSecurityPolicy, cps, crumb, gitHooks, gitHostKeyVerificationConfiguration, operationsCenterSecurityInfo, prism, queueItemAuthenticator, scriptApproval
