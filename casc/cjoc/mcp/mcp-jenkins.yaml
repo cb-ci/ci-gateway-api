@@ -22,13 +22,28 @@
 #    https://ci.acaternberg.aws.ps.beescloud.com/controller3
 #    https://ci.acaternberg.aws.ps.beescloud.com/cjoc
 
+# https://ci.acaternberg.aws.ps.beescloud.com/cjoc
+# https://ci.acaternberg.aws.ps.beescloud.com/controller2
+# https://ci.acaternberg.aws.ps.beescloud.com/controller1
+# https://ci.acaternberg.aws.ps.beescloud.com/controller3
+# https://ci.acaternberg.aws.ps.beescloud.com/folder-dev1-controllers-folder-controller1
+# https://ci.acaternberg.aws.ps.beescloud.com/folder-dev1-controllers-folder-controller2
+# https://ci.acaternberg.aws.ps.beescloud.com/hahs
+# https://ci.acaternberg.aws.ps.beescloud.com/plugins-casc-uc
+# https://ci.acaternberg.aws.ps.beescloud.com/plugable-storage
+# https://ci.acaternberg.aws.ps.beescloud.com/testnodegroup
+# https://ci.acaternberg.aws.ps.beescloud.com/workshop
+
 security:
   oauthAuthorizationServer:
     issuer: "https://${GATEWAY_DOMAIN}/cjoc/oauth-server"
     # in-cluster JWKS, avoids hairpin NAT through the gateway
     internalJwksUrl: "http://cjoc/cjoc/oauth-server/jwks"
     # global allow-list; must also contain everything in the per-client lists below
-    allowedAudiences: "${MCP_ALLOWED_AUDIENCES}"
+    allowedAudiences: |
+      ${mcp_audiences}
+    allowedAudiencesRaw: |
+      ${mcp_audiences}
     accessTokenTtlSeconds: 600
     exchangedTokenTtlSeconds: 300
     # skips the consent prompt for the two seeded clients; set to false to require approval on first use
@@ -66,8 +81,10 @@ credentials:
               grantTokenExchange: true
               tokenEndpointAuthMethod: CLIENT_SECRET_BASIC
               audience: "https://${GATEWAY_DOMAIN}/mcp-router"
-              allowedAudiences: "${MCP_ALLOWED_AUDIENCES}" # not sure if required since we have allowedAudiencesRaw
-              allowedAudiencesRaw: "${MCP_ALLOWED_AUDIENCES}"
+              allowedAudiences: |
+                ${mcp_audiences}
+              allowedAudiencesRaw: |
+               "${mcp_audiences}"
           # public PKCE client MCP agents (Claude Code: --client-id ci-mcp-client) sign in with; no token exchange,
           # so it carries no allowedAudiences of its own
           - jenkinsOAuthClient:
@@ -79,8 +96,10 @@ credentials:
               pkceRequired: true
               tokenEndpointAuthMethod: NONE              
               audience: "https://${GATEWAY_DOMAIN}/mcp-router"
-              allowedAudiences: "${MCP_ALLOWED_AUDIENCES}" # not sure if required since we have allowedAudiencesRaw
-              allowedAudiencesRaw: "${MCP_ALLOWED_AUDIENCES}"
+              allowedAudiences: |
+                ${mcp_audiences}
+              allowedAudiencesRaw: |
+               "${mcp_audiences}"
               redirectUrisRaw: |-
                 http://127.0.0.1/callback
                 http://[::1]/callback
