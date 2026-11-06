@@ -25,4 +25,4 @@ security:
     jwksCacheTtlSeconds: 300
     jwksUrl: "http://cjoc/cjoc/oauth-server/jwks"
     protectedPaths: "/mcp-server/*"
-    trustedIssuer: "https://ci.acaternberg.aws.ps.beescloud.com/cjoc/oauth-server"
+    trustedIssuer: "https://${GATEWAY_DOMAIN}/cjoc/oauth-server"

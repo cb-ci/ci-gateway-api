@@ -12,27 +12,10 @@
 
 #Example for allowed audiences ${MCP_ALLOWED_AUDIENCES}
 #  allowedAudiences:
-#  - "https://ci.acaternberg.aws.ps.beescloud.com/controller2"
-#  - "https://ci.acaternberg.aws.ps.beescloud.com/controller1"
-#  - "https://ci.acaternberg.aws.ps.beescloud.com/controller3"
-#  - "https://ci.acaternberg.aws.ps.beescloud.com/cjoc"
-#  allowedAudiencesRaw: |-
-#    https://ci.acaternberg.aws.ps.beescloud.com/controller2
-#    https://ci.acaternberg.aws.ps.beescloud.com/controller1
-#    https://ci.acaternberg.aws.ps.beescloud.com/controller3
-#    https://ci.acaternberg.aws.ps.beescloud.com/cjoc
-
-# https://ci.acaternberg.aws.ps.beescloud.com/cjoc
-# https://ci.acaternberg.aws.ps.beescloud.com/controller2
-# https://ci.acaternberg.aws.ps.beescloud.com/controller1
-# https://ci.acaternberg.aws.ps.beescloud.com/controller3
-# https://ci.acaternberg.aws.ps.beescloud.com/folder-dev1-controllers-folder-controller1
-# https://ci.acaternberg.aws.ps.beescloud.com/folder-dev1-controllers-folder-controller2
-# https://ci.acaternberg.aws.ps.beescloud.com/hahs
-# https://ci.acaternberg.aws.ps.beescloud.com/plugins-casc-uc
-# https://ci.acaternberg.aws.ps.beescloud.com/plugable-storage
-# https://ci.acaternberg.aws.ps.beescloud.com/testnodegroup
-# https://ci.acaternberg.aws.ps.beescloud.com/workshop
+#  - "https://${GATEWAY_DOMAIN}/controller2"
+#  - "https://${GATEWAY_DOMAIN}/controller1"
+#  - "https://${GATEWAY_DOMAIN}/controller3"
+#  - "https://${GATEWAY_DOMAIN}/cjoc"
 
 security:
   oauthAuthorizationServer:
