@@ -1,10 +1,5 @@
 # CloudBees CI MCP Router Documentation
 
-Collected 2026-10-29 from <https://docs.cloudbees.com/docs/cloudbees-ci/latest/mcp-router/> and its sub-pages.
-Page text was retrieved through the CloudBees docs search index (`librarian-doc`), which serves `docs.beescloud.com` content for the same paths; it was not scraped from `docs.cloudbees.com` directly. Page bodies are unmodified, but relative links are left as-is.
-
-Helm values in **Enable OAuth with Helm** were cross-checked against the `cloudbees-core` chart on Artifact Hub (<https://artifacthub.io/packages/helm/cloudbees/cloudbees-core>), chart version 3.38435.0+980594e799d5 (CloudBees CI 2.580.2.38434). The `McpRouter.privateKeyJwt`, `McpRouter.extraEnv`, `McpRouter.ocInternalUrl`, and `McpRouter.javaOpts` entries were expanded from that chart's parameter table.
-
 ---
 
 ## Table of Contents
@@ -346,15 +341,15 @@ Then run `/mcp`, select `ci-mcp-router`, and approve in the browser.
 
 To install the CloudBees CI MCP Router, first install the [MCP Server plugin](/plugins/ci/mcp-server) on your controllers, and then deploy the CloudBees CI MCP Router as a Docker container or in a Kubernetes cluster.
 
-* If you already deploy CloudBees CI on Kubernetes with the `cloudbees-core` Helm chart and plan to use OAuth, you can deploy and configure the CloudBees CI MCP Router using Helm without following manual deployment steps. For more information, refer to [Enable OAuth with Helm](#enable-oauth-with-helm).
-* To protect the CloudBees CI MCP Router from request floods and runaway agent loops, refer to [Rate Limiting](#rate-limiting).
+- If you already deploy CloudBees CI on Kubernetes with the `cloudbees-core` Helm chart and plan to use OAuth, you can deploy and configure the CloudBees CI MCP Router using Helm without following manual deployment steps. For more information, refer to [Enable OAuth with Helm](#enable-oauth-with-helm).
+- To protect the CloudBees CI MCP Router from request floods and runaway agent loops, refer to [Rate Limiting](#rate-limiting).
 
 ### Installation Prerequisites
 
 Before you begin, ensure that you have the following:
 
-* CloudBees CI version `2.541.2.35785` or later.
-* The [MCP Server plugin](/plugins/ci/mcp-server), version `0.148.v6b_c057f27738` or later, installed on one or more controllers.
+- CloudBees CI version `2.541.2.35785` or later.
+- The [MCP Server plugin](/plugins/ci/mcp-server), version `0.148.v6b_c057f27738` or later, installed on one or more controllers.
 
 ### Download the CloudBees CI MCP Router Image
 
@@ -384,15 +379,19 @@ After the image is present locally (either pulled manually or by Kubernetes), ve
 2. Run one of the following commands to verify the authenticity of a specific CloudBees CI MCP Router Docker image:
 
    - **Verify by digest:**
+
      ```bash
      cosign verify --key https://cdn.cloudbees.com/keyring/cloudbees.pub cloudbees/ci-mcp-router@sha256:<my-digest>
      ```
+
      *(Replace `<my-digest>` with the specific SHA-256 digest of the image, such as `abc123def456…`.)*
 
    - **Verify by tag:**
+
      ```bash
      cosign verify --key https://cdn.cloudbees.com/keyring/cloudbees.pub cloudbees/ci-mcp-router:<my-tag>
      ```
+
      *(Replace `<my-tag>` with the specific tag of the image, such as `latest` or a version number like `1.2.3`.)*
 
 Cosign returns a message indicating whether the images are authentic. An exit code of `0` indicates that the images are authentic. If the images are not validated as authentic, contact [CloudBees Support](https://support.cloudbees.com).
@@ -423,6 +422,7 @@ docker run -p 9000:9000 \
 ```
 
 **Parameters:**
+
 - `OC_URL`: Replace `<my-oc-url>` with the URL for your operations center.
 - `MCP_ROUTER_OC_CONTROLLERS_CACHE_TTL`: *(Optional)* Controls how long the CloudBees CI MCP Router caches the list of controllers from the operations center (default: `1H`). Decrease to detect newly provisioned controllers or controllers waking from hibernation faster; increase to reduce operations center load. Use suffixes `H` (hours), `M` (minutes), or `S` (seconds); for example, `1S` effectively disables caching.
 - `MCP_AUTH_UPSTREAM_TOKEN_EXCHANGE_MODE`: *(Optional)* Controls how access tokens are scoped when the router calls controllers (default: `FLEET`). `FLEET` generates one token covering all controllers (one authorization server round-trip); `PER_TARGET` generates one token per controller (one round-trip per controller). Use `PER_TARGET` when controllers are operated by different teams, to limit the scope of access if a controller is compromised.
@@ -448,6 +448,7 @@ containers:
 ```
 
 **Parameters:**
+
 - `<my-app>`: Container name.
 - `my-tag`: Specific tag or digest already verified (e.g. `1.2.3` or `@sha256:abc123…`). For security and reproducibility, do not use `latest`.
 - `containerPort: 9000`: Default internal port. Map any host or cluster port as needed; clients connect to the mapped port (e.g. `http://localhost:9000/mcp`).
@@ -474,8 +475,8 @@ While a caller stays within its allowance, its requests pass straight through wi
 The check runs at the very front of the `/mcp` endpoint, before any message is parsed, so it applies to the whole MCP conversation, including `initialize`, `tools/list`, and `tools/call`.
 
 The CloudBees CI MCP Router identifies each caller in one of two ways:
-* **Authenticated callers** are keyed by a hash of their `Authorization` header, so the raw credential is never stored, and each token or user gets its own allowance.
-* **Anonymous callers** (with no `Authorization` header) are keyed by their client IP address, so one anonymous flood cannot lock everyone else out.
+- **Authenticated callers** are keyed by a hash of their `Authorization` header, so the raw credential is never stored, and each token or user gets its own allowance.
+- **Anonymous callers** (with no `Authorization` header) are keyed by their client IP address, so one anonymous flood cannot lock everyone else out.
 
 ### Enable Rate Limiting
 
@@ -501,9 +502,9 @@ With the defaults, each caller is allowed 120 requests per minute.
 
 Rate limiting is a protective control, so keep the following in mind when you configure it:
 
-* Enable `MCP_RATE_LIMIT_TRUST_FORWARDED_FOR` only when a trusted ingress or load balancer sets the `X-Forwarded-For` header. Clients can forge that header, so if the CloudBees CI MCP Router is directly reachable, a caller could dodge the limit by sending a different value on every request. When the setting is disabled (the default), anonymous callers are keyed by the IP address of their direct connection instead.
-* Rate limiting protects availability, not access. It limits how often a caller can reach the CloudBees CI MCP Router, but it does not authenticate or authorize anyone, so keep [OAuth](#enable-oauth-authentication) or another authentication method in place as well.
-* Authenticated callers are keyed by a hash of their `Authorization` header, so raw tokens and passwords are never stored. `MCP_RATE_LIMIT_MAX_BUCKETS` also caps how many callers are tracked at once and evicts the least recently seen when the cap is reached, so a flood of ever-changing identities cannot grow the limiter’s memory without bound.
+- Enable `MCP_RATE_LIMIT_TRUST_FORWARDED_FOR` only when a trusted ingress or load balancer sets the `X-Forwarded-For` header. Clients can forge that header, so if the CloudBees CI MCP Router is directly reachable, a caller could dodge the limit by sending a different value on every request. When the setting is disabled (the default), anonymous callers are keyed by the IP address of their direct connection instead.
+- Rate limiting protects availability, not access. It limits how often a caller can reach the CloudBees CI MCP Router, but it does not authenticate or authorize anyone, so keep [OAuth](#enable-oauth-authentication) or another authentication method in place as well.
+- Authenticated callers are keyed by a hash of their `Authorization` header, so raw tokens and passwords are never stored. `MCP_RATE_LIMIT_MAX_BUCKETS` also caps how many callers are tracked at once and evicts the least recently seen when the cap is reached, so a flood of ever-changing identities cannot grow the limiter’s memory without bound.
 
 ---
 
@@ -514,8 +515,8 @@ Rate limiting is a protective control, so keep the following in mind when you co
 The CloudBees CI MCP Router supports two ways to authenticate to CloudBees CI: **OAuth** and **API token**. OAuth is recommended because each request carries the identity of the user or tool that made it. The CloudBees CI MCP Router stores only short-lived tokens scoped to the controllers it needs to access, rather than relying on a single shared token.
 
 Choose the method that fits your environment:
-* [Enable OAuth authentication for the CloudBees CI MCP Router](#enable-oauth-authentication) (recommended)
-* [Authenticate with an API token](#authenticate-with-an-api-token)
+- [Enable OAuth authentication for the CloudBees CI MCP Router](#enable-oauth-authentication) (recommended)
+- [Authenticate with an API token](#authenticate-with-an-api-token)
 
 > [!WARNING]
 > Authenticating with an API token will be deprecated in the future. For new deployments, CloudBees recommends that you use [OAuth](#enable-oauth-authentication), which authenticates each request individually rather than relying on a shared token.
@@ -529,29 +530,29 @@ Choose the method that fits your environment:
 OAuth is the recommended way for the CloudBees CI MCP Router to authenticate to CloudBees CI. Rather than relying on one shared token, each request carries the identity of the person or tool that made it, and the CloudBees CI MCP Router holds only short-lived tokens scoped to the controllers it needs to reach.
 
 OAuth uses the following components:
-* An MCP client (such as Claude Code or GitHub Copilot) signs in once and sends an OAuth token to the CloudBees CI MCP Router.
-* The CloudBees CI MCP Router exchanges that token for a short-lived token scoped to the controller it needs to reach, then forwards the request.
-* The controller validates the token and runs the request as the signed-in user.
+- An MCP client (such as Claude Code or GitHub Copilot) signs in once and sends an OAuth token to the CloudBees CI MCP Router.
+- The CloudBees CI MCP Router exchanges that token for a short-lived token scoped to the controller it needs to reach, then forwards the request.
+- The controller validates the token and runs the request as the signed-in user.
 
 Review the [Prerequisites](#oauth-prerequisites) and [Pre-seeded OAuth clients](#pre-seeded-oauth-clients), and then choose one of the following methods to enable OAuth:
-* [Enable OAuth with Helm](#enable-oauth-with-helm)
-* [Manually configure OAuth](#manually-configure-oauth)
+- [Enable OAuth with Helm](#enable-oauth-with-helm)
+- [Manually configure OAuth](#manually-configure-oauth)
 
 #### OAuth Prerequisites
 
 Before you begin, ensure that you have the following:
 
-* The **[CloudBees OAuth Resource Server plugin](/plugins/ci/cloudbees-oauth-resource)**, installed on the operations center and on every controller that should accept OAuth, and each instance restarted after installation.
+- The **[CloudBees OAuth Resource Server plugin](/plugins/ci/cloudbees-oauth-resource)**, installed on the operations center and on every controller that should accept OAuth, and each instance restarted after installation.
   > If your controllers are connected to the operations center, you do not need to configure each controller manually. When a controller connects to the operations center, it is automatically configured with the authorization server to trust.
-* The **[CloudBees OAuth Authorization Server plugin](/plugins/ci/cloudbees-oauth-server)**, installed on the operations center and the instance restarted after installation.
-* The CloudBees CI MCP Router [installed and running](#installation-and-deployment).
+- The **[CloudBees OAuth Authorization Server plugin](/plugins/ci/cloudbees-oauth-server)**, installed on the operations center and the instance restarted after installation.
+- The CloudBees CI MCP Router [installed and running](#installation-and-deployment).
 
 #### Pre-seeded OAuth Clients
 
 The authorization server ships with two pre-seeded OAuth clients, so no client registration is required to connect an MCP agent:
 
-* `cloudbees-mcp-router`: A confidential client, using the token-exchange grant, that the CloudBees CI MCP Router uses to exchange a user token for a controller-scoped token.
-* `ci-mcp-client`: A public client, using [Proof Key for Code Exchange (PKCE)](https://oauth.net/2/pkce/), that MCP agents such as Claude Code use to sign in. Select it with the `--client-id ci-mcp-client` flag when you connect an agent.
+- `cloudbees-mcp-router`: A confidential client, using the token-exchange grant, that the CloudBees CI MCP Router uses to exchange a user token for a controller-scoped token.
+- `ci-mcp-client`: A public client, using [Proof Key for Code Exchange (PKCE)](https://oauth.net/2/pkce/), that MCP agents such as Claude Code use to sign in. Select it with the `--client-id ci-mcp-client` flag when you connect an agent.
 
 Because these two clients are pre-seeded, an MCP agent using `ci-mcp-client` connects without needing to register first. On first use, you are asked to approve the client’s access, unless an administrator has enabled **Auto-approve seeded clients** on the authorization server.
 
@@ -586,10 +587,10 @@ If you already deploy CloudBees CI with the `cloudbees-core` Helm chart, you can
    ```
 
 The chart automatically:
-* Configures the authorization server with the addresses allowed to receive tokens (the CloudBees CI MCP Router and the controllers).
-* Configures the operations center and controllers with the authorization server to trust.
-* Exposes the OAuth discovery endpoints so that MCP clients can locate them.
-* Runs the CloudBees CI MCP Router under a dedicated Kubernetes service account and grants it a projected token (audience `cjoc`) that the authorization server validates to authenticate token-exchange requests; no shared secret is required.
+- Configures the authorization server with the addresses allowed to receive tokens (the CloudBees CI MCP Router and the controllers).
+- Configures the operations center and controllers with the authorization server to trust.
+- Exposes the OAuth discovery endpoints so that MCP clients can locate them.
+- Runs the CloudBees CI MCP Router under a dedicated Kubernetes service account and grants it a projected token (audience `cjoc`) that the authorization server validates to authenticate token-exchange requests; no shared secret is required.
 
 #### (Optional) Tune the Helm Configuration
 
@@ -621,12 +622,12 @@ The values described above are sufficient for most deployments. The following va
 
 By default, the CloudBees CI MCP Router authenticates to the authorization server with its projected service account token. To use an [RFC 7523](https://datatracker.ietf.org/doc/html/rfc7523) `private_key_jwt` assertion instead, configure:
 
-* `McpRouter.privateKeyJwt.enabled`: Controls mode (`NEVER`, `ALWAYS`, `AUTO`). Default: `NEVER`.
-  * `NEVER`: Uses projected service account token.
-  * `ALWAYS`: Signs with the shared key. Mounts `keySecretName` if set, otherwise generates a key and keeps it.
-  * `AUTO`: Signs only when `keySecretName` is set; falls back to projected service account token otherwise.
-* `McpRouter.privateKeyJwt.keySecretName`: The name of a Kubernetes Secret holding the RSA signing key in PEM format. The key is shared by every CloudBees CI MCP Router replica, so all pods publish one `kid` at `/jwks`.
-* `McpRouter.privateKeyJwt.keySecretKey`: The entry (file name) of the PEM within that Secret. Default: `signing-key.pem`.
+- `McpRouter.privateKeyJwt.enabled`: Controls mode (`NEVER`, `ALWAYS`, `AUTO`). Default: `NEVER`.
+  - `NEVER`: Uses projected service account token.
+  - `ALWAYS`: Signs with the shared key. Mounts `keySecretName` if set, otherwise generates a key and keeps it.
+  - `AUTO`: Signs only when `keySecretName` is set; falls back to projected service account token otherwise.
+- `McpRouter.privateKeyJwt.keySecretName`: The name of a Kubernetes Secret holding the RSA signing key in PEM format. The key is shared by every CloudBees CI MCP Router replica, so all pods publish one `kid` at `/jwks`.
+- `McpRouter.privateKeyJwt.keySecretKey`: The entry (file name) of the PEM within that Secret. Default: `signing-key.pem`.
 
 When `enabled` is `ALWAYS` and no `keySecretName` is set, the chart generates a signing key and stores it in a Secret named `mcp-router-signing-key`. This works for plain Helm, but under GitOps or `--dry-run`, the chart cannot look up the existing Secret and might regenerate the key. In those environments, create and name your own Secret:
 
@@ -680,6 +681,7 @@ If you do not use the Helm chart, you must configure the OAuth components manual
 The settings above are sufficient for most deployments. The following settings let you tune the resource server and authorization server when the defaults do not fit your environment.
 
 **Tune resource server settings (Operations Center and controllers):**
+
 1. In the operations center and on each controller, navigate to **Manage Jenkins** → **Security** and scroll down to **CloudBees OAuth Resource Server**.
 2. Leave **JWKS URL override** blank in most cases; by default the JWKS is fetched from `{trustedIssuer}/jwks` over HTTPS. Set it only if this instance’s public hostname is unreachable from inside the cluster (hairpin NAT), to an internal address such as `http://cjoc/cjoc/oauth-server/jwks`.
 3. If you selected **ROUTER_ONLY** for **Filter mode**, set **PRM resource URI** to the CloudBees CI MCP Router URL, so MCP clients discover CloudBees CI MCP Router instead of connecting to Jenkins directly.
@@ -688,6 +690,7 @@ The settings above are sufficient for most deployments. The following settings l
 6. If you need to adjust the leeway for token expiry validation, adjust **Clock skew** (default: `60` seconds).
 
 **Tune authorization server settings (Operations Center only):**
+
 1. In the operations center, navigate to **Manage Jenkins** → **Security** and scroll down to **CloudBees OAuth Authorization Server**.
 2. If you want the operations center to overwrite any locally set trusted issuer on connected controllers, select **Enforce trusted issuer on controllers**. Otherwise, the operations center seeds its issuer only on controllers that have none, leaving deliberate local values alone.
 3. If your security policy requires shorter token lifetimes than the defaults, adjust **Access token TTL** (default: `600` seconds) and **Exchanged token TTL** (default: `300` seconds). Exchanged tokens should be shorter than access tokens, because they can always be re-exchanged.
@@ -700,12 +703,12 @@ The settings above are sufficient for most deployments. The following settings l
    > Enable this only if you accept that these platform clients act on a user’s identity without explicit approval.
 9. If clients authenticate with `private_key_jwt` and your security policy requires different client assertion or JWKS lifetimes than the defaults, adjust **Client assertion max lifetime** (default: `300` seconds), **Client assertion clock skew** (default: `30` seconds), and **JWKS cache TTL** (default: `300` seconds).
 10. If you use the RFC 7523 jwt-bearer grant to trade external JWTs (such as Kubernetes service account tokens or GitHub Actions OIDC tokens) for CloudBees CI MCP Router tokens, under **Trusted assertion issuers**, select **+ Add trusted issuer**, and configure each external issuer:
-    * Set **Issuer (iss)** to the exact value of the assertion’s `iss` claim, for example, `https://token.actions.githubusercontent.com` or the Kubernetes API server issuer.
-    * Set **Expected audience (aud)** to a value unique to this authorization server, so a token minted for another service cannot be replayed at this endpoint.
-    * Set **Bound Jenkins user id** to the Jenkins user that every assertion from this issuer maps to. The external token never chooses its own identity; you pin it here.
-    * Provide the issuer’s public keys as either **Inline JWKS** or a **JWKS URL**. Prefer **JWKS URL** when the issuer rotates keys.
-    * Optionally, in **Allowed audiences**, add the audiences this issuer’s tokens may target, one per line. Leave blank to inherit the global **Allowed audiences** list.
-    * Optionally, in **Allowed subjects**, add the external `sub` values to accept from this issuer, one per line. Leave blank to accept any subject the issuer vouches for.
+    - Set **Issuer (iss)** to the exact value of the assertion’s `iss` claim, for example, `https://token.actions.githubusercontent.com` or the Kubernetes API server issuer.
+    - Set **Expected audience (aud)** to a value unique to this authorization server, so a token minted for another service cannot be replayed at this endpoint.
+    - Set **Bound Jenkins user id** to the Jenkins user that every assertion from this issuer maps to. The external token never chooses its own identity; you pin it here.
+    - Provide the issuer’s public keys as either **Inline JWKS** or a **JWKS URL**. Prefer **JWKS URL** when the issuer rotates keys.
+    - Optionally, in **Allowed audiences**, add the audiences this issuer’s tokens may target, one per line. Leave blank to inherit the global **Allowed audiences** list.
+    - Optionally, in **Allowed subjects**, add the external `sub` values to accept from this issuer, one per line. Leave blank to accept any subject the issuer vouches for.
 
 ##### Configure Using Configuration as Code (CasC)
 
@@ -760,9 +763,9 @@ docker run -p 9000:9000 \
 ```
 
 The following values must match the authorization server configuration:
-* `OAUTH_ISSUER` must match the **Issuer URL**.
-* `ROUTER_CLIENT_SECRET` must match the **Router client secret**.
-* `OAUTH_ROUTER_AUDIENCE` is the public address of the CloudBees CI MCP Router, and must appear in the **Allowed audiences** list of the authorization server.
+- `OAUTH_ISSUER` must match the **Issuer URL**.
+- `ROUTER_CLIENT_SECRET` must match the **Router client secret**.
+- `OAUTH_ROUTER_AUDIENCE` is the public address of the CloudBees CI MCP Router, and must appear in the **Allowed audiences** list of the authorization server.
 
 > [!CAUTION]
 > The router client secret allows the CloudBees CI MCP Router to obtain tokens, so protect it as you would a password. Use a Kubernetes Secret or secret store rather than passing it on the command line.
@@ -770,17 +773,23 @@ The following values must match the authorization server configuration:
 #### Verify OAuth is Working
 
 1. Verify that the authorization server is published (returns endpoint JSON):
+
    ```bash
    curl https://oc.example.com/oauth-server/oauth-authorization-server
    ```
+
 2. Verify that signing keys are available:
+
    ```bash
    curl https://oc.example.com/oauth-server/jwks
    ```
+
 3. Verify that a controller advertises OAuth:
+
    ```bash
    curl https://controller-a.example.com/.well-known/oauth-protected-resource
    ```
+
 4. After connecting an MCP agent, verify that you are prompted to sign in through OAuth instead of entering an API token.
 
 ---
@@ -820,16 +829,19 @@ Authenticate with the CloudBees CI MCP Router using HTTP basic authentication by
 Open a terminal and run the following command, replacing `<username>` and `<token>` with your actual username and the API token you generated in the operations center:
 
 **Linux or macOS:**
+
 ```bash
 echo -n "<username>:<token>" | base64
 ```
 
 **Windows (PowerShell):**
+
 ```powershell
 [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("<username>:<token>"))
 ```
 
 If successful, the Base64-encoded credential is output, similar to the following:
+
 ```text
 dXNlcm5hbWU6dG9rZW4=
 ```
@@ -857,9 +869,9 @@ Claude Code is a command-line interface (CLI) tool that connects to the CloudBee
 
 #### Prerequisites
 
-* The [CloudBees CI MCP Router installed](#installation-and-deployment).
-* Configured authentication using [OAuth](#enable-oauth-authentication) or an [API token](#authenticate-with-an-api-token).
-* Claude Code installed.
+- The [CloudBees CI MCP Router installed](#installation-and-deployment).
+- Configured authentication using [OAuth](#enable-oauth-authentication) or an [API token](#authenticate-with-an-api-token).
+- Claude Code installed.
 
 #### Connect Claude Code with OAuth (Recommended)
 
@@ -867,29 +879,38 @@ With OAuth, you do not need to pass credentials to the command line. You sign in
 
 1. Open a terminal on the machine where Claude Code is installed.
 2. Run the following command to add CloudBees CI MCP Router to Claude Code:
+
    ```bash
    claude mcp add ci-mcp-router <router-url> --transport http --client-id ci-mcp-client
    ```
+
    - Replace `<router-url>` with the MCP endpoint of your router: `http://localhost:9000/mcp` for local Docker, or `https://<cluster-domain>/mcp-router/mcp` for Helm.
    - The `--client-id ci-mcp-client` flag selects the pre-seeded public client. Without it, Claude Code attempts dynamic client registration (disabled by default, failing with 403).
 3. Start Claude Code:
+
    ```bash
    claude
    ```
+
 4. Run the `/mcp` command:
+
    ```text
    /mcp
    ```
+
 5. Select the `ci-mcp-router` server. A browser launches with an approval prompt. After you approve, Claude Code reuses the session for later requests.
 
 #### Connect Claude Code with an API Token
 
 1. Run the following command, replacing `dXNlcm5hbWU6dG9rZW4=` with your actual encoded credentials:
+
    ```bash
    claude mcp add ci-mcp-router http://localhost:9000/mcp --transport http --header "Authorization: Basic dXNlcm5hbWU6dG9rZW4="
    ```
+
    > Passing the encoded credential directly in this command leaves it in your shell history. Claude Code lets you reference an environment variable in the header value instead of the literal credential. For more information, refer to [Environment variable expansion in `.mcp.json`](https://code.claude.com/docs/en/mcp#environment-variable-expansion-in-mcp-json).
 2. Start Claude Code:
+
    ```bash
    claude
    ```
@@ -906,31 +927,38 @@ Once connected, you can ask questions and issue tasks using natural language. Fo
 
 #### Prerequisites
 
-* The [CloudBees CI MCP Router installed](#installation-and-deployment).
-* Configured authentication using [OAuth](#enable-oauth-authentication) or an [API token](#authenticate-with-an-api-token).
-* GitHub Copilot installed.
+- The [CloudBees CI MCP Router installed](#installation-and-deployment).
+- Configured authentication using [OAuth](#enable-oauth-authentication) or an [API token](#authenticate-with-an-api-token).
+- GitHub Copilot installed.
 
 #### Connect GitHub Copilot with OAuth (Recommended)
 
 1. Run the following command:
+
    ```bash
    copilot mcp add --transport http ci-mcp-router <router-url>
    ```
+
    *(Replace `<router-url>` with `http://localhost:9000/mcp` for Docker, or `https://<cluster-domain>/mcp-router/mcp` for Helm).*
 2. Start GitHub Copilot:
+
    ```bash
    copilot
    ```
+
    A browser launches with an approval prompt. After you approve, GitHub Copilot reuses the session for later requests.
 
 #### Connect GitHub Copilot with an API Token
 
 1. Run the following command:
+
    ```bash
    copilot mcp add ci-mcp-router --transport http http://localhost:9000/mcp --header "Authorization: Basic dXNlcm5hbWU6dG9rZW4="
    ```
+
    > GitHub Copilot has no confirmed way to reference an environment variable in this field. Treat this configuration file as sensitive, keep it out of version control, and rotate the credential if it’s ever exposed.
 2. Start GitHub Copilot:
+
    ```bash
    copilot
    ```
@@ -943,9 +971,9 @@ Once connected, you can ask questions and issue tasks using natural language. Fo
 
 #### Prerequisites
 
-* The [CloudBees CI MCP Router installed](#installation-and-deployment).
-* Configured authentication using [OAuth](#enable-oauth-authentication) or an [API token](#authenticate-with-an-api-token).
-* Goose installed.
+- The [CloudBees CI MCP Router installed](#installation-and-deployment).
+- Configured authentication using [OAuth](#enable-oauth-authentication) or an [API token](#authenticate-with-an-api-token).
+- Goose installed.
 
 #### Connect Goose with OAuth (Recommended)
 
@@ -979,9 +1007,11 @@ Once connected, you can ask questions and issue tasks using natural language. Fo
    ```
 
 2. Start Goose:
+
    ```bash
    goose session
    ```
+
    A browser launches with an approval prompt. After approval, Goose reuses the session.
 
 #### Connect Goose with an API Token
@@ -1025,6 +1055,7 @@ Once connected, you can ask questions and issue tasks using natural language. Fo
    ```
 
 2. Start Goose:
+
    ```bash
    goose session
    ```
@@ -1037,29 +1068,35 @@ Once connected, you can ask questions and issue tasks using natural language. Fo
 
 #### Prerequisites
 
-* The [CloudBees CI MCP Router installed](#installation-and-deployment).
-* Configured authentication using [OAuth](#enable-oauth-authentication) or an [API token](#authenticate-with-an-api-token).
-* Kiro installed.
+- The [CloudBees CI MCP Router installed](#installation-and-deployment).
+- Configured authentication using [OAuth](#enable-oauth-authentication) or an [API token](#authenticate-with-an-api-token).
+- Kiro installed.
 
 #### Connect Kiro with OAuth (Recommended)
 
 1. Add the router to Kiro:
+
    ```bash
    kiro-cli mcp add --name ci-mcp-router --url <router-url>
    ```
+
 2. Start Kiro:
+
    ```bash
    kiro-cli
    ```
+
 3. Press `Ctrl+y` to authenticate. Kiro copies an OAuth approval URL to your clipboard.
 4. Paste the URL into your browser and approve access.
 
 #### Connect Kiro with an API Token
 
 1. Add the router to Kiro:
+
    ```bash
    kiro-cli mcp add --name ci-mcp-router --url <router-url>
    ```
+
 2. Open the `mcp.json` configuration file created by the command and add the `headers` field:
 
    ```json
@@ -1074,7 +1111,9 @@ Once connected, you can ask questions and issue tasks using natural language. Fo
      }
    }
    ```
+
 3. Save `mcp.json` and start Kiro:
+
    ```bash
    kiro-cli
    ```
@@ -1124,9 +1163,9 @@ If you encounter problems configuring or connecting CloudBees CI MCP Router, use
 
 If OAuth requests are rejected after configuration, check the following common misconfigurations:
 
-* **Issuer mismatch:** The **Trusted issuer** on the resource server and the `OAUTH_ISSUER` of the CloudBees CI MCP Router must both match the **Issuer URL** of the authorization server exactly, including `https://` and any trailing path.
-* **Audience mismatch:** Each controller and the CloudBees CI MCP Router must appear in the **Allowed audiences** list of the authorization server, and the **Accepted audience** of each instance must be its own address.
-* **Keys unreachable:** Controllers fetch the signing keys from the issuer’s public HTTPS `/jwks` endpoint by default. If a controller genuinely cannot reach that address, set the **Internal JWKS URL** on the authorization server to an internally reachable **HTTPS** address.
+- **Issuer mismatch:** The **Trusted issuer** on the resource server and the `OAUTH_ISSUER` of the CloudBees CI MCP Router must both match the **Issuer URL** of the authorization server exactly, including `https://` and any trailing path.
+- **Audience mismatch:** Each controller and the CloudBees CI MCP Router must appear in the **Allowed audiences** list of the authorization server, and the **Accepted audience** of each instance must be its own address.
+- **Keys unreachable:** Controllers fetch the signing keys from the issuer’s public HTTPS `/jwks` endpoint by default. If a controller genuinely cannot reach that address, set the **Internal JWKS URL** on the authorization server to an internally reachable **HTTPS** address.
 
 If the issue persists, contact [CloudBees Support](https://support.cloudbees.com).
 
@@ -1185,14 +1224,14 @@ If an OAuth signing key on the operations center’s authorization server may be
 ### Signing Key Rotation
 
 The authorization server holds at most two signing keys:
-* **Active key:** Signs new tokens.
-* **Retiring key:** Stays published during a short overlap window so that tokens issued before a rotation still validate.
+- **Active key:** Signs new tokens.
+- **Retiring key:** Stays published during a short overlap window so that tokens issued before a rotation still validate.
 
 The key material is stored, encrypted, in `$JENKINS_HOME/cloudbees-oauth-server/signing-keys.xml` on the operations center.
 
 Two behaviors make incident response necessary:
-* The operations center publishes public keys from the JSON Web Key Set (JWKS) endpoint (`/oauth-server/jwks`), and controllers cache the key set with a lifetime of up to 300 seconds (five minutes).
-* Scheduled rotation only drops the retiring key after the overlap window elapses. It does not evict a key on demand.
+- The operations center publishes public keys from the JSON Web Key Set (JWKS) endpoint (`/oauth-server/jwks`), and controllers cache the key set with a lifetime of up to 300 seconds (five minutes).
+- Scheduled rotation only drops the retiring key after the overlap window elapses. It does not evict a key on demand.
 
 > [!IMPORTANT]
 > A single rotation does not remove a compromised key. Rotating once demotes the current active key to the retiring slot, where it stays published in the JWKS and continues to validate forged tokens. You must rotate **twice** to evict it; the second rotation overwrites the retiring slot with a freshly generated key.
@@ -1204,9 +1243,11 @@ The following steps rotate the signing key twice, which evicts the compromised k
 You need **Overall/Administer** permission on the operations center to complete this procedure.
 
 1. Fetch the JWKS from the authorization server and note the `kid` values currently published:
+
    ```bash
    curl -s https://oc.example.com/oauth-server/jwks | jq '.keys[].kid'
    ```
+
    The active `kid` is also written to the operations center log on every rotation (`Signing key rotated. Active kid=…`). Confirm which `kid` corresponds to the compromised key before continuing.
 
 2. On the operations center, navigate to **Manage Jenkins** → **Script Console** and run the following script:
@@ -1231,6 +1272,7 @@ You need **Overall/Administer** permission on the operations center to complete 
    *(If the operations center Script Console is unavailable, stop the operations center, delete `$JENKINS_HOME/cloudbees-oauth-server/signing-keys.xml`, and restart. A new active key is generated on startup. This invalidates all previously issued tokens, not only forged ones).*
 
 3. Fetch the JWKS again and confirm the compromised `kid` no longer appears:
+
    ```bash
    curl -s https://oc.example.com/oauth-server/jwks | jq '.keys[].kid'
    ```
@@ -1244,7 +1286,7 @@ The authorization server stops advertising the compromised key immediately. Each
 ### Post-Incident Follow-Up
 
 After removing the key, take the following steps to investigate and prevent future exposure:
-* Investigate what exposed the key material. If `master.key` may have leaked, treat it as a CloudBees CI-wide incident.
-* Revoke affected users' grants and refresh tokens if their credentials may also be compromised.
+- Investigate what exposed the key material. If `master.key` may have leaked, treat it as a CloudBees CI-wide incident.
+- Revoke affected users' grants and refresh tokens if their credentials may also be compromised.
 
 For other OAuth issues, refer to [Troubleshooting](#troubleshooting).
