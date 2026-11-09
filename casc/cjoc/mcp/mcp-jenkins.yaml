@@ -10,7 +10,7 @@
 
 #https://${GATEWAY_DOMAIN}/cjoc/manage/configureSecurity/, Security -> CloudBees OAuth Authorization Server / Resource Server
 
-#Example for allowed audiences ${MCP_ALLOWED_AUDIENCES}
+#Example for allowed audiences in mcp-varibales.yaml ${mcp_audiences} 
 #  allowedAudiences:
 #  - "https://${GATEWAY_DOMAIN}/controller2"
 #  - "https://${GATEWAY_DOMAIN}/controller1"

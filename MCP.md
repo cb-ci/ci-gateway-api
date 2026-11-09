@@ -78,14 +78,14 @@ Helm values in **Enable OAuth with Helm** were cross-checked against the `cloudb
 ```bash
 claude mcp remove ci-mcp-router
 claude mcp add --transport http --client-id ci-mcp-client \
-  --callback-port 8123 ci-mcp-router https://ci.acaternberg.aws.ps.beescloud.com/mcp-router/mcp
+  --callback-port 8123 ci-mcp-router https://ci.example.com/mcp-router/mcp
 ```
 
 ---
 
 ## Architecture
 
-The diagrams below summarize the relationships described in the pages that follow. They are an overview, not part of the upstream documentation.
+These diagrams sketch how the pieces in the pages below fit together. They're an overview, not upstream documentation.
 
 ### Components (generic)
 
@@ -152,7 +152,7 @@ In `AUTO` upstream mode, the router exchanges OAuth bearer tokens and forwards a
 
 Derived from the CasC bundles in `casc/cjoc` (bundle id `jenkins`, version 6) and `casc/controller-base` (bundle id `controller`, version 3), the managed controller definitions in `casc/cjoc/controllers/`, `eks/eksctl/05-installCloudBees.sh`, and a live `listControllers` call through the router on 2026-11-06. Only the MCP-related parts are covered. Client secrets, the GitHub token and the license key are not in the bundles and are not reproduced here. Do not commit secrets exported from a running OC.
 
-Previous revisions of this section (2026-10-29) were based on exports in `casc/export/`; where the bundles and that export differ, the bundles are authoritative for what is declared, and the running OC is authoritative for what is enforced (not re-verified here).
+An earlier version of this section (2026-10-29) was based on exports in `casc/export/`. Where the bundles and that export differ, the bundles show what is declared and the running OC shows what is enforced (not re-verified here).
 
 ### Topology
 
@@ -161,7 +161,7 @@ flowchart LR
     Agent["Claude Code<br/>client-id ci-mcp-client (PKCE)"]
 
     subgraph EKS["EKS cluster, namespace cbci"]
-        GW["Gateway API: cbci-gateway<br/>ci.acaternberg.aws.ps.beescloud.com"]
+        GW["Gateway API: cbci-gateway<br/>ci.example.com"]
         R["MCP Router<br/>upstreamMode AUTO<br/>500m CPU, 1Gi"]
 
         subgraph OCS["Operations center /cjoc"]
@@ -248,7 +248,7 @@ MCP settings are split into `mcp/` files referenced from `casc/cjoc/bundle.yaml`
 | Client `ci-mcp-client` | `jenkinsOAuthClient`, scope `SYSTEM`, public (`tokenEndpointAuthMethod: NONE`), auth-code + refresh, PKCE required, `audience: https://${GATEWAY_DOMAIN}/mcp-router`, redirect URIs `http://127.0.0.1/callback`, `http://[::1]/callback`, `http://localhost/callback` |
 | Controller items | `controllers/controller1.yaml`, `controller2-externalbundleservice.yaml`, `controller3.yaml` (below); `removeStrategy`: `rbac: SYNC`, `items: NONE` |
 
-Bundle-source polling, provisioning (cluster endpoint, Gateway exposure, storage class) and cluster operations are not MCP-related and are not tracked in this section.
+Bundle-source polling, provisioning (cluster endpoint, Gateway exposure, storage class) and cluster operations aren't MCP-related, so this section skips them.
 
 The credentials fragment in `mcp/mcp-credentials.yaml` is a second `credentials.system.domainCredentials` entry next to `credentials.yaml` (`gh-user-token`). The file itself says the merge has to be validated on the OC.
 
@@ -302,7 +302,7 @@ The bundle declares one allow-list: the global `security.oauthAuthorizationServe
 
 **Per-client lists are no longer declared.** The 2026-10-29 export had `allowedAudiences` on `cloudbees-mcp-router`; `mcp-credentials.yaml` omits it. ASSUMPTION: whether the running OC still enforces a per-client list, and what an empty one means, was not verified. If the `invalid_target ... allowedAudiences for client_id=cloudbees-mcp-router` error reappears, check the client in the OC UI first.
 
-The router requests every controller audience at once (exchange 2 above), taken from the OC controller list. If one controller on the OC is missing from the global list, the whole call fails. The seven entries without a bundle item are listed so that any such controllers that still exist on the OC keep working. Keep the list in sync with the controllers actually on the OC, and keep it in CasC so a bundle reload does not revert a UI edit.
+The router requests every controller audience at once (exchange 2 above), taken from the OC controller list. If one controller on the OC is missing from the global list, the whole call fails. The seven entries without a bundle item are there so controllers that still exist on the OC keep working. Keep the list in sync with the controllers actually on the OC, and keep it in CasC so a bundle reload does not revert a UI edit.
 
 ### Controller status
 
@@ -845,7 +845,7 @@ Store the encoded credential in a secure location for later use.
 
 ## Connecting MCP Agents
 
-MCP agents empower your team to automate and streamline CI workflows by connecting MCP-compatible tools to CloudBees CI. With support for multiple controllers, you can securely access and manage jobs, builds, and resources across your entire environment. The CloudBees CI MCP Router extends Jenkins capabilities, so you can programmatically interact with Jenkins, automate routine tasks, and enhance your development process using real-time data.
+MCP agents connect MCP-compatible tools to CloudBees CI. The router supports multiple controllers, so an agent can access and manage jobs, builds, and resources across all of them.
 
 ---
 
@@ -853,7 +853,7 @@ MCP agents empower your team to automate and streamline CI workflows by connecti
 
 ### Connect Claude Code
 
-Claude Code is an AI-powered command-line interface (CLI) tool that integrates with the CloudBees CI MCP Router through the [MCP Server plugin](/plugins/ci/mcp-server), connecting your development environment to CloudBees CI. This enables context-aware code suggestions and automation using real CloudBees CI data.
+Claude Code is a command-line interface (CLI) tool that connects to the CloudBees CI MCP Router through the [MCP Server plugin](/plugins/ci/mcp-server), giving it access to CloudBees CI data.
 
 #### Prerequisites
 
