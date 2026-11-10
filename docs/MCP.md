@@ -309,6 +309,8 @@ credentials:
               scope: SYSTEM
               grantTokenExchange: true
               tokenEndpointAuthMethod: CLIENT_SECRET_BASIC
+              # required for token exchange
+              audience: "https://${GATEWAY_DOMAIN}/mcp-router"
               # optional per-client restriction: must be a YAML list
               allowedAudiences:
                 - "https://${GATEWAY_DOMAIN}/cjoc"
@@ -351,7 +353,6 @@ plugins:
 ```yaml
 security:
   oauthResourceServer:
-    trustedIssuer: "https://${GATEWAY_DOMAIN}/cjoc/oauth-server"
     jwksUrl: "http://cjoc/cjoc/oauth-server/jwks"   # in-cluster, avoids hairpin NAT
     filterMode: AUTO
     protectedPaths: "/mcp-server/*"
@@ -359,7 +360,9 @@ security:
     jwksCacheTtlSeconds: 300
 ```
 
-- Controllers connected to the operations center receive the trusted issuer automatically when none is set. Pinning it in the bundle makes the setting explicit and reviewable.
+- Controllers connected to the operations center receive the trusted issuer automatically when none is set, so the bundle leaves `trustedIssuer` out.
+- Do not pin `trustedIssuer: "https://${GATEWAY_DOMAIN}/..."` in the controller bundle unless `GATEWAY_DOMAIN` is also defined in the controller's environment. The variable is normally supplied to the operations center only, so on a controller it resolves to an empty host (`https:///cjoc/oauth-server`), every exchanged token is rejected and requests run as anonymous.
+- A controller that already stored a bad value may keep it. Set `enforceTrustedIssuer: true` on the authorization server once to overwrite it, then verify with `curl .../controller-a/.well-known/oauth-protected-resource`.
 - Install `cloudbees-oauth-server` on the operations center only.
 - A controller that uses a different bundle source (for example an external bundle service) gets these settings only if that bundle declares them.
 
@@ -465,6 +468,8 @@ Disabled by default. Each caller gets a token bucket and receives `HTTP 429` wit
 | Empty job lists, or unfiltered calls time out | Target controllers offline, deprovisioned or hibernating | Check `listControllers`, start them, or pass controller names |
 | `getJobs` on the operations center returns `[]` | The operations center MCP tools cover topology, not job listing | Use the operations center UI or REST API |
 | Router logs `Invalid MCP protocol header` (HTTP 400) and continues | Client sends a newer protocol version than the router supports | Harmless fallback, update the router image when a newer one is available |
+| `/mcp` fails with `invalid_grant ... audience is not configured for client cloudbees-mcp-router` | The router client has no `audience` set | Add `audience: "https://${GATEWAY_DOMAIN}/mcp-router"` to the `cloudbees-mcp-router` client and reload the bundle |
+| Tools return `anonymous is missing the Overall/Read permission` although `/mcp` signed in | The controller rejected the exchanged token and, in `AUTO` mode, treated the request as anonymous. A common cause is an empty issuer: `curl https://ci.example.com/controller-a/.well-known/oauth-protected-resource` shows `"authorization_servers":["https:///cjoc/oauth-server"]`, meaning `${GATEWAY_DOMAIN}` is not defined in the controller's environment | Define the variable for the controllers, or leave `trustedIssuer` out of the controller bundle and let the operations center seed it. Then confirm `whoAmI` returns your user |
 | OAuth requests rejected after setup | Issuer, audience or JWKS mismatch | Compare `issuer` and `trustedIssuer` exactly, check each controller's accepted audience, set `internalJwksUrl` if keys are unreachable |
 
 Enable `FINE` logging for `com.cloudbees.jenkins.plugins.oauth.resource` on the instance that rejects the request (it traces `bearer_reject`), then turn it off again:

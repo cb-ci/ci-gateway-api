@@ -1,4 +1,4 @@
-# CloudBees CI MCP Router: OAuth authorization server, resource server and OAuth clients (see MCP.md at the repository root)
+# CloudBees CI MCP Router: OAuth authorization server, resource server and OAuth clients (see docs/MCP.md)
 #
 # Needs this env var on the operations center (cjoc-casc-envvars ConfigMap, eks/eksctl/05-installCloudBees.sh):
 #   GATEWAY_DOMAIN  public host name, e.g. ci.example.com

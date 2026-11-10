@@ -211,7 +211,7 @@ agent pods will stay `Pending` indefinitely.
 
 ## MCP Router (optional)
 
-Set `MCP_ENABLED=true` in `.env` before running `05-installCloudBees.sh` to deploy the CloudBees CI MCP Router with OAuth through the `cloudbees-core` chart (`McpRouter.enabled`, `OperationsCenter.OAuthServer.Enabled`, upstream mode `AUTO`). Background, auth flow and chart values are in [`MCP.md`](MCP.md).
+Set `MCP_ENABLED=true` in `.env` before running `05-installCloudBees.sh` to deploy the CloudBees CI MCP Router with OAuth through the `cloudbees-core` chart (`McpRouter.enabled`, `OperationsCenter.OAuthServer.Enabled`, upstream mode `AUTO`). Background, auth flow and chart values are in [`MCP.md`](../../docs/MCP.md).
 
 | Variable | Default | Purpose |
 |---|---|---|

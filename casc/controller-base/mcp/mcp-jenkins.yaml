@@ -1,4 +1,4 @@
-# MCP endpoint protection on every controller (see MCP.md at the repository root)
+# MCP endpoint protection on every controller (see docs/MCP.md)
 #
 # trustedIssuer is deliberately not set here: connected controllers get it from the operations center
 # (authorization server "enforceTrustedIssuer: false" seeds it only when empty). GATEWAY_DOMAIN is defined on the

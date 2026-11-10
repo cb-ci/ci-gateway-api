@@ -1,5 +1,5 @@
 ---
-# MCP Router + OAuth on every controller (see MCP.md at the repository root)
+# MCP Router + OAuth on every controller (see docs/MCP.md)
 # The authorization server plugin (cloudbees-oauth-server) belongs on the operations center only.
 plugins:
   - id: mcp-server # src; /mcp-server/stateless endpoint the router calls

@@ -11,7 +11,7 @@ The goal of this project is to demonstrate how to replace traditional Ingress-ba
 1. **GKE Native (`gke/google-gw`)**: Leveraging Google Cloud's managed Gateway controller.
 2. **AKS Native (`aks/azure-appgw`)**: Leveraging Azure Cloud's managed Application Gateway (AGIC).
 3. **Envoy Gateway (`gke/envoy`, `aks/envoy`)**: Utilizing the cloud-agnostic Envoy Gateway controller.
-4. **EKS with Envoy Gateway and a remote Client Controller (`eks/`)**: An EKS cluster (provisioned with either `eksctl` scripts or Terraform) running Envoy Gateway behind an AWS Application Load Balancer, plus an optional EC2-hosted Client Controller whose Kubernetes Cloud schedules build agent pods in the cluster.
+4. **EKS with Envoy Gateway and a remote Client Controller (`eks/`)**: An EKS cluster (provisioned with either `eksctl` scripts or Terraform) running Envoy Gateway behind an AWS Application Load Balancer, plus an optional EC2-hosted Client Controller whose Kubernetes Cloud schedules build agent pods in the cluster. The `eksctl` path also offers optional features that the Terraform path does not: pluggable storage, the MCP Router with OAuth, CasC bundles and S3 buckets (see [Optional EKS features](#optional-eks-features-eksctl-path-only)).
 
 ## Project Structure
 
@@ -21,7 +21,9 @@ The goal of this project is to demonstrate how to replace traditional Ingress-ba
   * `eks/eksctl/`: numbered shell scripts for the cluster, EFS, AWS Load Balancer Controller, Cluster Autoscaler, Envoy Gateway, CloudBees CI, ExternalDNS, the EC2 Client Controller and the remote-agent ServiceAccount (see [`eks/eksctl/README.md`](./eks/eksctl/README.md)).
   * `eks/tf/`: Terraform equivalent in three root modules: `01-infra`, `02-platform`, and the optional `03-ec2-controller` (see [`eks/tf/README.md`](./eks/tf/README.md)).
   * `eks/cloudbees-core/`: local Helm chart used for the CloudBees CI install.
+* **[casc/](./casc)**: CloudBees CasC bundles delivered to the operations center and controllers (`casc/cjoc`, `casc/controller-base`), plus bundle validation notes in [`casc/README.md`](./casc/README.md). Used by the `eksctl` path.
 * **[scripts/](./scripts)**: Shared utility library (`_functions.sh`), SSL generation, and test tools.
+* **[docs/](./docs)**: CloudBees CI MCP Router documentation: [`MCP.md`](./docs/MCP.md) (Helm and CasC configuration), [`MCP-TEST-PLAN.md`](./docs/MCP-TEST-PLAN.md) and the test run results.
 
 ## Prerequisites
 
@@ -89,6 +91,33 @@ cd eks/eksctl/
 ```
 
 For the full EKS sequence, including the Terraform path, follow [`eks/README.md`](./eks/README.md).
+
+## Optional EKS features (eksctl path only)
+
+These features are implemented only by the `eks/eksctl` scripts. The Terraform modules in `eks/tf` do not include them (there is no S3, backup, pluggable storage, MCP or CasC retriever code in `eks/tf`). They are off unless you enable them in `eks/eksctl/.env` before running `05-installCloudBees.sh`.
+
+| Feature | Switch in `.env` | Helper script | Details |
+| --- | --- | --- | --- |
+| **Pluggable storage** (Pipeline build logs on S3) | `S3_LOGS_ENABLED=true` | `07-createS3PlugableStorage-LogsBucket.sh` (teardown: `07-deleteS3PlugableStorage-LogsBucket.sh`) | [CloudBees docs](https://docs.cloudbees.com/docs/cloudbees-ci/latest/pipelines/cloudbees-pluggable-storage) |
+| **MCP Router + OAuth** | `MCP_ENABLED=true`, optional `MCP_UPSTREAM_MODE`, `MCP_RATE_LIMIT_*`, `MCP_CONTROLLERS_CACHE_TTL` | none, installed by `05-installCloudBees.sh` | [`docs/MCP.md`](./docs/MCP.md), [`docs/MCP-TEST-PLAN.md`](./docs/MCP-TEST-PLAN.md) |
+| **CasC bundles + retriever** | `CASC_ENABLED=true` with `CASC_SCM_REPO`, `CASC_SCM_BRANCH`, `CASC_SCM_BUNDLE_PATH_CJOC`, `CASC_SCM_USERNAME` and `CASC_SCM_PASSWORD` | none, installed by `05-installCloudBees.sh` | [`casc/`](./casc), [`casc/README.md`](./casc/README.md) |
+| **S3 backup bucket** | none | `07-createS3BackupBucket.sh` (teardown: `07-deleteS3BackupBucket.sh`) | Access for controllers through EKS Pod Identity. See the script header |
+| **S3 artifact storage** (Artifact Manager on S3) | none | `07-createS3ArtifactStorage.sh` (teardown: `07-deleteS3ArtifactStorage.sh`) | Access through EKS Pod Identity, no static keys. See the script header |
+
+Example (`eks/eksctl/.env`, then run the scripts from `eks/eksctl/`):
+
+```bash
+export CASC_ENABLED=true               # plus the CASC_SCM_* variables
+export S3_LOGS_ENABLED=true
+export MCP_ENABLED=true
+```
+
+```bash
+./07-createS3PlugableStorage-LogsBucket.sh   # create the logs bucket first when S3_LOGS_ENABLED=true
+./05-installCloudBees.sh
+```
+
+Keep `.env` out of version control: it holds the CasC SCM credentials and the operations center admin password. The backup bucket script discovers controller ServiceAccounts, so run it after the controllers exist. The MCP Router additionally needs the MCP Server and OAuth plugins on the operations center and controllers, which the bundles in `casc/` provide.
 
 ## Maintenance and Standards
 
