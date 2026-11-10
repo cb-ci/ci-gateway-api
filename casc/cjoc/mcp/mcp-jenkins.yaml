@@ -1,18 +1,19 @@
-# CloudBees CI MCP Router: OAuth authorization server, resource server and OAuth clients (see eks/eksctl/MCP.md)
+# CloudBees CI MCP Router: OAuth authorization server, resource server and OAuth clients (see MCP.md at the repository root)
 #
-# Needs these env vars on the operations center (cjoc-casc-envvars ConfigMap, 05-installCloudBees.sh):
-#   GATEWAY_DOMAIN         public host name, e.g. ci.example.com
-#   MCP_ALLOWED_AUDIENCES  one audience URL per line: https://<GATEWAY_DOMAIN>/cjoc plus every controller
-#                          (https://<GATEWAY_DOMAIN>/<controller-url-path>). The router requests all of them in one
-#                          token exchange, so one missing entry fails the whole call (invalid_target).
+# Needs this env var on the operations center (cjoc-casc-envvars ConfigMap, eks/eksctl/05-installCloudBees.sh):
+#   GATEWAY_DOMAIN  public host name, e.g. ci.example.com
 #
 # Client secrets are deliberately not set here. Do not commit encrypted secrets exported from a running OC.
 
 #https://${GATEWAY_DOMAIN}/cjoc/manage/configureSecurity/, Security -> CloudBees OAuth Authorization Server / Resource Server
 
-# oauthAuthorizationServer.allowedAudiences is a scalar (newline-separated string): use ${mcp_audiences}.
-# The per-client allowedAudiences in mcp-credentials.yaml is a sequence: use the mcp_aud_* variables there.
-# Keep both in sync in mcp-variables.yaml.
+# Allowed audiences: https://<GATEWAY_DOMAIN>/cjoc plus every controller (https://<GATEWAY_DOMAIN>/<controller-url-path>).
+# The router requests all of them in one token exchange, so one missing entry fails the whole call (invalid_target).
+# - oauthAuthorizationServer.allowedAudiences is a scalar (newline-separated string): use ${mcp_audiences},
+#   defined in mcp/mcp-variables.yaml.
+# - The per-client allowedAudiences in mcp-credentials.yaml is a YAML sequence. A variable expands to one string and
+#   cannot fill a list, so write the https://${GATEWAY_DOMAIN}/<name> entries out there.
+# Keep both lists in sync.
 
 security:
   oauthAuthorizationServer:

@@ -1,9 +1,11 @@
-# MCP endpoint protection on every controller (see eks/eksctl/MCP.md)
+# MCP endpoint protection on every controller (see MCP.md at the repository root)
 #
-# trustedIssuer is not set here: connected controllers get it from the operations center
-# (authorization server "enforceTrustedIssuer: false" seeds it only when empty). To pin it in the bundle add
-#   trustedIssuer: "https://<gateway-host>/cjoc/oauth-server"
-# which must match the authorization server issuer exactly.
+# trustedIssuer is deliberately not set here: connected controllers get it from the operations center
+# (authorization server "enforceTrustedIssuer: false" seeds it only when empty). GATEWAY_DOMAIN is defined on the
+# operations center only; pinning "https://${GATEWAY_DOMAIN}/..." here resolves to an empty host on controllers
+# ("https:///cjoc/oauth-server"), so every exchanged token is rejected and requests fall through as anonymous.
+# To pin it, first make GATEWAY_DOMAIN available in the controller environment. It must match the issuer exactly.
+# jwksUrl is the in-cluster JWKS address (no variable needed).
 security:
   oauthResourceServer:
     clockSkewSeconds: 60
@@ -11,4 +13,4 @@ security:
     jwksCacheTtlSeconds: 300
     jwksUrl: "http://cjoc/cjoc/oauth-server/jwks"
     protectedPaths: "/mcp-server/*"
-    trustedIssuer: "https://${GATEWAY_DOMAIN}/cjoc/oauth-server"
+    #trustedIssuer: "https://${GATEWAY_DOMAIN}/cjoc/oauth-server"
