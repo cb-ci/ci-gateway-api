@@ -1,0 +1,133 @@
+---
+cbci                   cjoc-0                                                       1/2     CrashLoopBackOff   6 (50s ago)     3d17h
+cbci                   mcp-router-75bcf95695-zcg6h                                  1/1     Running            0               22m
+  cjoc-secrets:
+    Type:        Secret (a volume populated by a Secret)
+    SecretName:  cjoc-secrets
+    Optional:    false
+  kube-api-access-rz97z:
+    Type:                    Projected (a volume that contains injected data from multiple sources)
+    TokenExpirationSeconds:  3607
+    ConfigMapName:           kube-root-ca.crt
+    Optional:                false
+    DownwardAPI:             true
+QoS Class:                   Guaranteed
+Node-Selectors:              workload=controller
+Tolerations:                 node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                             node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+                             workload=controller:NoSchedule
+Events:
+  Type     Reason     Age                  From     Message
+  ----     ------     ----                 ----     -------
+  Warning  Unhealthy  9m42s                kubelet  spec.containers{jenkins}: Liveness probe failed: HTTP probe failed with statuscode: 503
+  Warning  Unhealthy  9m42s                kubelet  spec.containers{jenkins}: Readiness probe failed: HTTP probe failed with statuscode: 503
+  Normal   Pulled     9m33s                kubelet  spec.containers{jenkins}: Successfully pulled image "cloudbees/cloudbees-cloud-core-oc:latest" in 156ms (156ms including waiting). Image size: 488767381 bytes.
+  Warning  Unhealthy  9m2s                 kubelet  spec.containers{jenkins}: Startup probe failed: Get "http://10.0.87.106:8080/cjoc/health/": dial tcp 10.0.87.106:8080: connect: connection refused
+  Normal   Pulled     7m57s                kubelet  spec.containers{jenkins}: Successfully pulled image "cloudbees/cloudbees-cloud-core-oc:latest" in 157ms (157ms including waiting). Image size: 488767381 bytes.
+  Normal   Pulled     6m29s                kubelet  spec.containers{jenkins}: Successfully pulled image "cloudbees/cloudbees-cloud-core-oc:latest" in 152ms (152ms including waiting). Image size: 488767381 bytes.
+  Normal   Pulled     4m38s                kubelet  spec.containers{jenkins}: Successfully pulled image "cloudbees/cloudbees-cloud-core-oc:latest" in 143ms (143ms including waiting). Image size: 488767381 bytes.
+  Normal   Pulling    82s (x7 over 22h)    kubelet  spec.containers{jenkins}: Pulling image "cloudbees/cloudbees-cloud-core-oc:latest"
+  Normal   Created    82s (x7 over 22h)    kubelet  spec.containers{jenkins}: Container created
+  Normal   Started    82s (x7 over 22h)    kubelet  spec.containers{jenkins}: Container started
+  Normal   Pulled     82s (x2 over 8m51s)  kubelet  spec.containers{jenkins}: Successfully pulled image "cloudbees/cloudbees-cloud-core-oc:latest" in 146ms (146ms including waiting). Image size: 488767381 bytes.
+  Warning  BackOff    50s (x15 over 9m1s)  kubelet  spec.containers{jenkins}: Back-off restarting failed container jenkins in pod cjoc-0_cbci(d1984655-b8ff-47e4-9431-af7ef43088bc)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.ee9.servlet.FilterHolder.doFilter(FilterHolder.java:202)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.ee9.servlet.ServletHandler$Chain.doFilter(ServletHandler.java:1640)
+	at hudson.util.CharacterEncodingFilter.doFilter(CharacterEncodingFilter.java:85)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.ee9.servlet.FilterHolder.doFilter(FilterHolder.java:202)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.ee9.servlet.ServletHandler$Chain.doFilter(ServletHandler.java:1640)
+	at org.kohsuke.stapler.DiagnosticThreadNameFilter.doFilter(DiagnosticThreadNameFilter.java:31)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.ee9.servlet.FilterHolder.doFilter(FilterHolder.java:202)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.ee9.servlet.ServletHandler$Chain.doFilter(ServletHandler.java:1640)
+	at jenkins.security.SuspiciousRequestFilter.doFilter(SuspiciousRequestFilter.java:38)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.ee9.servlet.FilterHolder.doFilter(FilterHolder.java:202)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.ee9.servlet.ServletHandler$Chain.doFilter(ServletHandler.java:1640)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.ee9.servlet.ServletHandler.doHandle(ServletHandler.java:526)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.ee9.nested.ScopedHandler.handle(ScopedHandler.java:125)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.ee9.security.SecurityHandler.handle(SecurityHandler.java:588)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.ee9.nested.HandlerWrapper.handle(HandlerWrapper.java:124)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.ee9.nested.ScopedHandler.nextHandle(ScopedHandler.java:195)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.ee9.nested.SessionHandler.doHandle(SessionHandler.java:612)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.ee9.nested.ScopedHandler.nextHandle(ScopedHandler.java:193)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.ee9.nested.ContextHandler.doHandle(ContextHandler.java:1047)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.ee9.nested.ScopedHandler.nextScope(ScopedHandler.java:162)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.ee9.servlet.ServletHandler.doScope(ServletHandler.java:483)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.ee9.nested.ScopedHandler.nextScope(ScopedHandler.java:160)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.ee9.nested.SessionHandler.doScope(SessionHandler.java:589)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.ee9.nested.ScopedHandler.nextScope(ScopedHandler.java:160)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.ee9.nested.ContextHandler.doScope(ContextHandler.java:962)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.ee9.nested.ScopedHandler.handle(ScopedHandler.java:123)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.ee9.nested.ContextHandler.handle(ContextHandler.java:1738)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.ee9.nested.HttpChannel$RequestDispatchable.dispatch(HttpChannel.java:1586)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.ee9.nested.HttpChannel.dispatch(HttpChannel.java:737)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.ee9.nested.HttpChannel.handle(HttpChannel.java:520)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.ee9.nested.ContextHandler$CoreContextHandler$CoreToNestedHandler.handle(ContextHandler.java:3098)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.server.handler.ContextHandler.handle(ContextHandler.java:1253)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.server.handler.gzip.GzipHandler.handle(GzipHandler.java:621)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.server.Server.handle(Server.java:197)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.server.internal.HttpChannelState$HandlerInvoker.run(HttpChannelState.java:804)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.server.internal.HttpConnection.onFillable(HttpConnection.java:420)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.server.internal.HttpConnection$FillableCallback.succeeded(HttpConnection.java:1789)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.io.FillInterest.fillable(FillInterest.java:105)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.io.SelectableChannelEndPoint$1.run(SelectableChannelEndPoint.java:54)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.util.thread.strategy.AdaptiveExecutionStrategy.runTask(AdaptiveExecutionStrategy.java:492)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.util.thread.strategy.AdaptiveExecutionStrategy.epcRunTask(AdaptiveExecutionStrategy.java:428)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.util.thread.strategy.AdaptiveExecutionStrategy.consumeTask(AdaptiveExecutionStrategy.java:401)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.util.thread.strategy.AdaptiveExecutionStrategy.tryProduce(AdaptiveExecutionStrategy.java:255)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.util.thread.strategy.AdaptiveExecutionStrategy.run(AdaptiveExecutionStrategy.java:204)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.util.thread.ReservedThreadExecutor$ReservedThread.run(ReservedThreadExecutor.java:317)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.util.thread.QueuedThreadPool.runJob(QueuedThreadPool.java:1009)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.util.thread.QueuedThreadPool$Runner.doRunJob(QueuedThreadPool.java:1240)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.util.thread.QueuedThreadPool$Runner.run(QueuedThreadPool.java:1194)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+2026-11-10 10:58:07.258+0000 [id=33]	INFO	hudson.WebAppMain#_contextDestroyed: Shutting down a Jenkins instance that was still starting up
+java.lang.Throwable: reason
+	at hudson.WebAppMain._contextDestroyed(WebAppMain.java:439)
+	at hudson.WebAppMain.contextDestroyed(WebAppMain.java:422)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.ee9.nested.ContextHandler.callContextDestroyed(ContextHandler.java:910)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.ee9.servlet.ServletContextHandler.callContextDestroyed(ServletContextHandler.java:608)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.ee9.nested.ContextHandler.contextDestroyed(ContextHandler.java:867)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.ee9.servlet.ServletHandler.doStop(ServletHandler.java:307)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.util.component.AbstractLifeCycle.stop(AbstractLifeCycle.java:131)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.util.component.ContainerLifeCycle.stop(ContainerLifeCycle.java:181)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.util.component.ContainerLifeCycle.doStop(ContainerLifeCycle.java:203)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.ee9.nested.AbstractHandler.doStop(AbstractHandler.java:88)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.ee9.security.SecurityHandler.doStop(SecurityHandler.java:415)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.ee9.security.ConstraintSecurityHandler.doStop(ConstraintSecurityHandler.java:435)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.util.component.AbstractLifeCycle.stop(AbstractLifeCycle.java:131)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.util.component.ContainerLifeCycle.stop(ContainerLifeCycle.java:181)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.util.component.ContainerLifeCycle.doStop(ContainerLifeCycle.java:203)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.ee9.nested.AbstractHandler.doStop(AbstractHandler.java:88)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.util.component.AbstractLifeCycle.stop(AbstractLifeCycle.java:131)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.util.component.ContainerLifeCycle.stop(ContainerLifeCycle.java:181)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.util.component.ContainerLifeCycle.doStop(ContainerLifeCycle.java:203)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.ee9.nested.AbstractHandler.doStop(AbstractHandler.java:88)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.ee9.nested.ContextHandler.stopContext(ContextHandler.java:890)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.ee9.servlet.ServletContextHandler.stopContext(ServletContextHandler.java:371)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.ee9.webapp.WebAppContext.stopWebapp(WebAppContext.java:1427)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.ee9.webapp.WebAppContext.stopContext(WebAppContext.java:1387)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.ee9.nested.ContextHandler.doStopInContext(ContextHandler.java:741)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.server.handler.ContextHandler$ScopedContext.call(ContextHandler.java:1659)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.ee9.nested.ContextHandler.doStop(ContextHandler.java:734)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.ee9.servlet.ServletContextHandler.doStop(ServletContextHandler.java:284)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.util.component.AbstractLifeCycle.stop(AbstractLifeCycle.java:131)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.util.component.ContainerLifeCycle.stop(ContainerLifeCycle.java:181)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.util.component.ContainerLifeCycle.doStop(ContainerLifeCycle.java:203)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.server.Handler$Abstract.doStop(Handler.java:553)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.server.handler.ContextHandler.lambda$doStop$0(ContextHandler.java:985)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.server.handler.ContextHandler$ScopedContext.call(ContextHandler.java:1665)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.server.handler.ContextHandler.doStop(ContextHandler.java:985)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.ee9.nested.ContextHandler$CoreContextHandler.doStop(ContextHandler.java:2930)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.util.component.AbstractLifeCycle.stop(AbstractLifeCycle.java:131)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.util.component.ContainerLifeCycle.stop(ContainerLifeCycle.java:181)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.util.component.ContainerLifeCycle.doStop(ContainerLifeCycle.java:203)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.server.Handler$Abstract.doStop(Handler.java:553)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.server.handler.gzip.GzipHandler.doStop(GzipHandler.java:146)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.util.component.AbstractLifeCycle.stop(AbstractLifeCycle.java:131)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.util.component.ContainerLifeCycle.stop(ContainerLifeCycle.java:181)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.util.component.ContainerLifeCycle.doStop(ContainerLifeCycle.java:203)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.server.Handler$Abstract.doStop(Handler.java:553)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.server.Server.doStop(Server.java:738)
+	at Jenkins Main ClassLoader//org.eclipse.jetty.util.component.AbstractLifeCycle.stop(AbstractLifeCycle.java:131)
+	at Jenkins Main ClassLoader//winstone.Launcher.shutdown(Launcher.java:441)
+	at Jenkins Main ClassLoader//winstone.ShutdownHook.run(ShutdownHook.java:28)
