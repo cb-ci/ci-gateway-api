@@ -1,9 +1,14 @@
 # Bundle validation
 
+Some notes according to bundle validation endpoints.
+Variables used below:
+
+```bash
 SA=${SA:-service-account:token}
 CJOC=${CJOC:-<http://localhost:8080/cjoc}>
 CONTROLLER=${CONTROLLER:-http://localhost:8080/controller1}
 BUNDLE_ID=${BUNDLE_ID:-main/controller-base}
+```
 
 ## Validates raw bundles over HTTP before adding them to the operations center
 
