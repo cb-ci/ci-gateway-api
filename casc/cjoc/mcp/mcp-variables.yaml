@@ -1,13 +1,12 @@
 variables:
-  - mcp_audiences: |-
-      https://${GATEWAY_DOMAIN}/cjoc
-      https://${GATEWAY_DOMAIN}/controller2
-      https://${GATEWAY_DOMAIN}/controller1
-      https://${GATEWAY_DOMAIN}/controller3
-      https://${GATEWAY_DOMAIN}/folder-dev1-controllers-folder-controller1
-      https://${GATEWAY_DOMAIN}/folder-dev1-controllers-folder-controller2
-      https://${GATEWAY_DOMAIN}/hahs
-      https://${GATEWAY_DOMAIN}/plugins-casc-uc
-      https://${GATEWAY_DOMAIN}/plugable-storage
-      https://${GATEWAY_DOMAIN}/testnodegroup
-      https://${GATEWAY_DOMAIN}/workshop
+  - mcp_aud_cjoc: https://${GATEWAY_DOMAIN}/cjoc
+  - mcp_aud_controller1: https://${GATEWAY_DOMAIN}/controller1
+  - mcp_aud_controller2: https://${GATEWAY_DOMAIN}/controller2
+  - mcp_aud_controller3: https://${GATEWAY_DOMAIN}/controller3
+  - mcp_aud_folder_dev1_controller1: https://${GATEWAY_DOMAIN}/folder-dev1-controllers-folder-controller1
+  - mcp_aud_folder_dev1_controller2: https://${GATEWAY_DOMAIN}/folder-dev1-controllers-folder-controller2
+  - mcp_aud_hahs: https://${GATEWAY_DOMAIN}/hahs
+  - mcp_aud_plugins_casc_uc: https://${GATEWAY_DOMAIN}/plugins-casc-uc
+  - mcp_aud_plugable_storage: https://${GATEWAY_DOMAIN}/plugable-storage
+  - mcp_aud_testnodegroup: https://${GATEWAY_DOMAIN}/testnodegroup
+  - mcp_aud_workshop: https://${GATEWAY_DOMAIN}/workshop
