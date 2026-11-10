@@ -5,20 +5,6 @@
 #   trustedIssuer: "https://<gateway-host>/cjoc/oauth-server"
 # which must match the authorization server issuer exactly.
 security:
-  oauthAuthorizationServer:
-    accessTokenTtlSeconds: 600
-    autoApproveSeededClients: false
-    clientAssertionClockSkewSeconds: 30
-    clientAssertionMaxLifetimeSeconds: 300
-    dcrEnabled: false
-    dcrRefreshTokenTtlSeconds: 2592000
-    dcrSecretTtlSeconds: 15552000
-    enforceTrustedIssuer: false
-    exchangedTokenTtlSeconds: 300
-    idleEvictionEnabled: true
-    idleEvictionTtlSeconds: 7776000
-    jwksCacheTtlSeconds: 300
-    rootRegisterCompat: false
   oauthResourceServer:
     clockSkewSeconds: 60
     filterMode: AUTO
