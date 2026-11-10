@@ -27,7 +27,9 @@ security:
     # skips the consent prompt for the two seeded clients; set to false to require approval on first use
     autoApproveSeededClients: true
     dcrEnabled: false
-    enforceTrustedIssuer: false
+    # TEMPORARY: overwrite a stale trustedIssuer ("https:///cjoc/oauth-server") stored on controllers by an earlier
+    # bundle. Set back to false once the controllers advertise the correct issuer.
+    enforceTrustedIssuer: true
     clientAssertionClockSkewSeconds: 30
     clientAssertionMaxLifetimeSeconds: 300
     jwksCacheTtlSeconds: 300
