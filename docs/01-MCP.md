@@ -125,7 +125,7 @@ OperationsCenter:
     Enabled: true
     Retriever:
       Enabled: true
-      scmRepo: https://git.example.com/my-org/my-casc-bundles.git
+      scmRepo: https://github.com/cb-ci/ci-gateway-api.git
       scmBundlePath: casc/cjoc
       scmBranch: main
       scmPollingInterval: PT1M
