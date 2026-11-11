@@ -13,16 +13,14 @@ ROOT_DIR="$(cd "${SCRIPT_DIR}/../" && pwd)"
 source "${ROOT_DIR}/scripts/_functions.sh"
 
 # Load environment variables
-#load_env "${SCRIPT_DIR}/.env"
+load_env "${SCRIPT_DIR}/.env"
 
 # --- Configuration ---
 
-ENVOY_GW_NAMESPACE=envoy-gateway-system
-NAMESPACE=test-ns
-TEST_HOST_NAME=example.com
-
-ENVOY_GW_NAMESPACE=envoy-gateway-system
-GATEWAY_CLASS_NAME=eg
+ENVOY_GW_NAMESPACE=${ENVOY_GW_NAMESPACE:-envoy-gateway-system}
+NAMESPACE=${NAMESPACE:-test-ns}
+TEST_HOST_NAME=${TEST_HOST_NAME:-example.com}
+GATEWAY_CLASS_NAME=${GATEWAY_CLASS_NAME:-eg}
 
 log "Starting complete cleanup of Envoy Gateway and CloudBees CI resources..."
 

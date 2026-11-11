@@ -11,20 +11,21 @@ ROOT_DIR="$(cd "${SCRIPT_DIR}/../" && pwd)"
 source "${ROOT_DIR}/scripts/_functions.sh"
 
 # Load environment variables
-load_env "${ROOT_DIR}/.env"
+load_env "${SCRIPT_DIR}/.env"
+validate_vars CLUSTER_NAME ZONE CERT_NAME
 
 
 # --- Configuration ---
 ENVOY_GATEWAY_VERSION=${ENVOY_GATEWAY_VERSION:-latest}
-ENVOY_GW_NAMESPACE=envoy-gateway-system
-GATEWAY_CLASS_NAME=eg
+ENVOY_GW_NAMESPACE=${ENVOY_GW_NAMESPACE:-envoy-gateway-system}
+GATEWAY_CLASS_NAME=${GATEWAY_CLASS_NAME:-eg}
 GATEWAY_NAME=test-gateway-1
 GATEWAY_ROUTE_NAME=test-route
 GATEWAY_POLICY_NAME=test-traffic-policy
 CERT_DIR="${ROOT_DIR}/ssl"
-NAMESPACE=test-ns
+NAMESPACE=${NAMESPACE:-test-ns}
 STORAGE_CLASS=premium-rwo
-TEST_HOST_NAME=example.com
+TEST_HOST_NAME=${TEST_HOST_NAME:-example.com}
 
 
 
