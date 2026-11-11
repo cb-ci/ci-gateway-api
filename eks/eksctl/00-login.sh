@@ -7,5 +7,4 @@
 # exort AWS_SECRET_ACCESS_KEY=xxx 
 # export AWS_SESSION_TOKEN=xxx
 
-
-
+source ./.env

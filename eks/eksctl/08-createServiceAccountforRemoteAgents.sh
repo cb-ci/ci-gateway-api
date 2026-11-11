@@ -1,6 +1,8 @@
 #!/bin/bash
 set -euo pipefail
 
+source ./.env
+# agent namespace
 NAMESPACE=cbci-builds
 
 # --dry-run=client -o yaml | kubectl apply -f -  makes these safe to re-run
