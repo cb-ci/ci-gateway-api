@@ -68,12 +68,16 @@ See [`.env-template`](.env-template) for the full list of variables.
 07-createEC2WithController.sh      (optional: standalone EC2 Client Controller)
 ```
 
-[`01-scaleDonwNodePools.sh`](01-scaleDonwNodePools.sh) / [`01-scaleUpNodePools.sh`](01-scaleUpNodePools.sh), [`01-upgradeCluster.sh`](01-upgradeCluster.sh),
-[`07-stopEC2Instance.sh`](07-stopEC2Instance.sh) / [`07-startEC2Instance.sh`](07-startEC2Instance.sh),
-the `07-*S3*` bucket scripts (see [S3 Storage](#s3-storage-optional)),
-[`08-createServiceAccountforRemoteAgents.sh`](08-createServiceAccountforRemoteAgents.sh), and every `*delete*.sh` script
-are operational — run them any time after the initial sequence, not as part
-of it. For teardown order, see [Execution Sequence (Teardown)](#execution-sequence-teardown).
+### Operational Scripts (Day-2)
+
+The following scripts are **operational** — run them any time after the initial sequence, not as part of it:
+
+- **Node pool scaling:** [`01-scaleDonwNodePools.sh`](01-scaleDonwNodePools.sh) / [`01-scaleUpNodePools.sh`](01-scaleUpNodePools.sh)
+- **Cluster upgrades:** [`01-upgradeCluster.sh`](01-upgradeCluster.sh)
+- **EC2 controller power management:** [`07-stopEC2Instance.sh`](07-stopEC2Instance.sh) / [`07-startEC2Instance.sh`](07-startEC2Instance.sh)
+- **S3 bucket management:** The `07-*S3*` bucket scripts (see [S3 Storage](#s3-storage-optional))
+- **Remote agent service account:** [`08-createServiceAccountforRemoteAgents.sh`](08-createServiceAccountforRemoteAgents.sh)
+- **Teardown and cleanup:** Every `*delete*.sh` script (for teardown order, see [Execution Sequence (Teardown)](#execution-sequence-teardown))
 
 ## Execution Sequence (Teardown)
 
