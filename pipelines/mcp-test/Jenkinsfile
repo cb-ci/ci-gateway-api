@@ -1,0 +1,59 @@
+// SIM 08: Jenkinsfile loaded from SCM (this repository), not inline.
+// TRhis is a simple dumy piplien only used for the MCP tests
+// Proves the clone works, then publishes a tiny generated JUnit report so that
+// getBuildScm, getBuildChangeSets, findJobsWithScmUrl and getTestResults return real data.
+pipeline {
+  agent {
+    kubernetes {
+      yaml '''
+apiVersion: v1
+kind: Pod
+spec:
+  containers:
+  - name: main
+    image: alpine:3.20
+    command: ['sleep']
+    args: ['99d']
+'''
+      defaultContainer 'main'
+    }
+  }
+  options {
+    skipDefaultCheckout(true)
+    timeout(time: 10, unit: 'MINUTES')
+  }
+  stages {
+    stage('Checkout') {
+      steps {
+        // The jnlp container ships git; the alpine "main" container does not.
+        container('jnlp') {
+          script {
+            def scmVars = checkout scm
+            echo "Cloned ${scmVars.GIT_URL} at ${scmVars.GIT_COMMIT} (${scmVars.GIT_BRANCH})"
+          }
+        }
+        sh 'echo "Workspace content:"; ls -la; echo; ls -la pipelines/mcp-test'
+      }
+    }
+    stage('Test') {
+      steps {
+        sh '''
+          mkdir -p reports
+          cat > reports/mcp-scm-hello.xml <<'XML'
+<testsuite name="mcp-scm-hello" tests="3" failures="0" errors="0" skipped="0">
+  <testcase classname="mcp.scm" name="repository_cloned" time="0.1"/>
+  <testcase classname="mcp.scm" name="jenkinsfile_present" time="0.1"/>
+  <testcase classname="mcp.scm" name="workspace_readable" time="0.1"/>
+</testsuite>
+XML
+          echo "Wrote reports/mcp-scm-hello.xml"
+        '''
+      }
+    }
+  }
+  post {
+    always {
+      junit 'reports/*.xml'
+    }
+  }
+}
