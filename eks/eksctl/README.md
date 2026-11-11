@@ -43,20 +43,24 @@ See [`.env-template`](.env-template) for the full list of variables.
    ▼
 01-createCluster.sh                (EKS cluster, VPC, node groups)
    │
-   ├──────────────────────────────────────┐
-   ▼                                       ▼
-02-create-efs-filesystem.sh        03-installClusterAutoscaler.sh
-(shared EFS storage — optional)    (Cluster Autoscaler — independent branch,
-   │                                run any time after cluster creation)
+   ├── 02-create-efs-filesystem.sh          (optional: shared EFS storage)
+   ├── 03-installClusterAutoscaler.sh       (independent, any time after 01)
+   ├── 07-createS3BackupBucket.sh           (optional, independent; re-run after
+   └── 07-createS3ArtifactStorage.sh         adding controllers; see S3 Storage)
+   │
    ▼
 03-installAwsLbController.sh       (AWS Load Balancer Controller)
    │
    ▼
 04-installEnvoy.sh                 (Envoy Gateway + shared ALB + ACM cert)
    │
+   ├── 07-createS3PlugableStorage-LogsBucket.sh
+   │   (optional — run BEFORE 05 when S3_LOGS_ENABLED=true)
    ▼
 05-installCloudBees.sh             (CloudBees CI / CJOC via Helm)
-   │
+   │                                optional flags in .env: CASC_ENABLED,
+   │                                S3_LOGS_ENABLED, CHANNEL_PINGER_ENABLED,
+   │                                MCP_ENABLED
    ▼
 06-installExternalDNS.sh           (Route53 record automation for CJOC)
    │
@@ -66,6 +70,7 @@ See [`.env-template`](.env-template) for the full list of variables.
 
 [`01-scaleDonwNodePools.sh`](01-scaleDonwNodePools.sh) / [`01-scaleUpNodePools.sh`](01-scaleUpNodePools.sh), [`01-upgradeCluster.sh`](01-upgradeCluster.sh),
 [`07-stopEC2Instance.sh`](07-stopEC2Instance.sh) / [`07-startEC2Instance.sh`](07-startEC2Instance.sh),
+the `07-*S3*` bucket scripts (see [S3 Storage](#s3-storage-optional)),
 [`08-createServiceAccountforRemoteAgents.sh`](08-createServiceAccountforRemoteAgents.sh), and every `*delete*.sh` script
 are operational — run them any time after the initial sequence, not as part
 of it. Teardown runs in the **reverse** order of creation (delete the EC2
@@ -200,18 +205,56 @@ agent pods will stay `Pending` indefinitely.
 | 03 | [`03-installClusterAutoscaler.sh`](03-installClusterAutoscaler.sh) | Installs Kubernetes Cluster Autoscaler via Helm using the IRSA ServiceAccount eksctl created (`wellKnownPolicies.autoScaler`), matches the image tag to the cluster's live Kubernetes minor version, and verifies both node groups' ASGs are tagged for auto-discovery (automatic since `minSize != maxSize` on `controllers`/`agents`). Also grants supplemental read-only RBAC on the `resource.k8s.io` API group (Dynamic Resource Allocation objects), which newer autoscaler builds watch unconditionally but the Helm chart's bundled ClusterRole doesn't grant. Independent of the ALB/Envoy chain — run any time after [`01-createCluster.sh`](01-createCluster.sh). |
 | 04 | [`04-installEnvoy.sh`](04-installEnvoy.sh) | Installs Envoy Gateway, requests/validates the ACM certificate for `CJOC_HOST_NAME` (with automated Route53 DNS validation), and creates the Gateway/GatewayClass/HTTPRoute plumbing plus the `cjoc-alb` Ingress that provisions the **shared internet-facing ALB**. |
 | 04 | [`04-deleteEnvoy.sh`](04-deleteEnvoy.sh) | Tears down the Ingress (deprovisioning the ALB), Gateway API resources, and the Envoy Gateway Helm release. Leaves the CloudBees namespace, CRDs, and ACM certificate in place unless `--delete-crds` / `--delete-cert` are passed. |
-| 05 | [`05-installCloudBees.sh`](05-installCloudBees.sh) | Installs CloudBees CI (Operations Center / CJOC) via the `cloudbees/cloudbees-core` Helm chart, wired to the Gateway from step 04, and waits for the Gateway to get an address. Optional parts are switched on in `.env` (`CASC_ENABLED`, `S3_LOGS_ENABLED`, `CHANNEL_PINGER_ENABLED`, `MCP_ENABLED`; see [MCP Router](#mcp-router-optional)). |
+| 05 | [`05-installCloudBees.sh`](05-installCloudBees.sh) | Installs CloudBees CI (Operations Center / CJOC) via the `cloudbees/cloudbees-core` Helm chart, wired to the Gateway from step 04, and waits for the Gateway to get an address. Optional parts are switched on in `.env` (see [Optional install flags](#optional-install-flags-05-installcloudbeessh)). |
 | 05 | [`05-deleteCloudBees.sh`](05-deleteCloudBees.sh) | Uninstalls the CloudBees CI Helm release and associated resources. |
 | 06 | [`06-installExternalDNS.sh`](06-installExternalDNS.sh) | Installs `external-dns` (via EKS Pod Identity) scoped to a least-privilege, hosted-zone-specific IAM policy, so Route53 A records for `CJOC_HOST_NAME` are created/kept in sync automatically from the Ingress. |
 | 07 | [`07-createEC2WithController.sh`](07-createEC2WithController.sh) | **Optional add-on.** Provisions a standalone Amazon Linux 2023 EC2 instance (Java 21 + Docker + systemd-managed CloudBees CI Client Controller container) and wires it into the *same shared ALB* from step 04 via a new host-header listener rule, its own ACM certificate (SNI), a dedicated target group/security group/IAM instance profile, and a Route53 alias record — without creating a second ALB. Also adds a scoped 443 rule to the EKS cluster's own security group so this instance can reach the Kubernetes API server (needed because `clusterEndpoints.privateAccess: true` routes in-VPC clients through that security group, not the public endpoint). |
 | 07 | [`07-deleteEC2WithController.sh`](07-deleteEC2WithController.sh) | Tears down everything the EC2 create script added (listener rule, target group, instance, the cluster-security-group's 443 rule, security group, IAM role/profile, Route53 record; ACM cert opt-in via `--delete-cert`) while explicitly leaving the VPC, EKS cluster, and shared ALB/listener/default certificate untouched. |
 | 07 | [`07-stopEC2Instance.sh`](07-stopEC2Instance.sh) | Stops (does not terminate) the EC2 Client Controller instance to park it and save EC2 compute cost, leaving its security group, IAM role, target group, listener rule, ACM cert, Route53 record, and EBS volume untouched. Waits for `stopped` by default (`--no-wait`, `--yes`). |
 | 07 | [`07-startEC2Instance.sh`](07-startEC2Instance.sh) | Starts a previously stopped EC2 Client Controller instance back up so the target group reports healthy again. Waits for `running` by default (`--no-wait`, `--yes`). |
+| 07 | [`07-createS3BackupBucket.sh`](07-createS3BackupBucket.sh) | **Optional.** Creates a CloudBees CI backup bucket (public access blocked, lifecycle expiry) and grants every managed controller access via EKS Pod Identity. Controller ServiceAccounts are discovered from pods labelled `com.cloudbees.cje.type=master`. Re-run after adding a controller. |
+| 07 | [`07-deleteS3BackupBucket.sh`](07-deleteS3BackupBucket.sh) | **Destructive.** Deletes the backup bucket and all objects, plus the IAM policy. Keeps the role and associations if another policy (e.g. artifacts) is still attached. Asks for confirmation. |
+| 07 | [`07-createS3ArtifactStorage.sh`](07-createS3ArtifactStorage.sh) | **Optional.** Creates the bucket for the *Artifact Manager on S3* plugin and grants the controller ServiceAccounts access via Pod Identity instead of IAM-user access keys. Policy is scoped to this bucket by default. |
+| 07 | [`07-deleteS3ArtifactStorage.sh`](07-deleteS3ArtifactStorage.sh) | **Destructive.** Deletes the artifacts bucket and all objects, the policy, role and its associations. Associations that point at another role are kept; only the artifacts policy is detached from that role. |
+| 07 | [`07-createS3PlugableStorage-LogsBucket.sh`](07-createS3PlugableStorage-LogsBucket.sh) | **Optional.** Creates the bucket for Pluggable Storage (Pipeline build logs) and grants the `pluggable-storage-service` ServiceAccount access via Pod Identity. Run before `05-installCloudBees.sh` with `S3_LOGS_ENABLED=true`. |
+| 07 | [`07-deleteS3PlugableStorage-LogsBucket.sh`](07-deleteS3PlugableStorage-LogsBucket.sh) | **Destructive.** Deletes the logs bucket and all build logs, plus the policy, role and association. Asks for confirmation. |
 | 08 | [`08-createServiceAccountforRemoteAgents.sh`](08-createServiceAccountforRemoteAgents.sh) | Creates a `jenkins-agent` ServiceAccount, Role, and RoleBinding in the `cbci-builds` namespace (get/list/watch/create/delete/update/patch on pods, pods/log, pods/exec, events, and PVCs), plus a non-expiring legacy-style Secret token, and prints the decoded token — used to configure a Jenkins Kubernetes Cloud (e.g. from a remote/standalone Controller) so it can provision agent pods in this cluster. |
+
+## Optional install flags (`05-installCloudBees.sh`)
+
+The base install always runs. Everything below is off by default and switched on in `.env`; `HELM_DEBUG=true` adds `helm --debug`. Flags are read at install time, so re-run the script (a `helm upgrade`) after changing them.
+
+| Variable | Default | Effect |
+|---|---|---|
+| `CASC_ENABLED` | `false` | Deploys the CasC bundle retriever for the operations center from `CASC_SCM_REPO`/`CASC_SCM_BRANCH`, path `CASC_SCM_BUNDLE_PATH_CJOC`. Requires `CASC_SCM_USERNAME`, `CASC_SCM_PASSWORD` and `CJOC_ADMIN_PASSWORD`; the script aborts if they are missing. Bundles live in [`../../casc`](../../casc). |
+| `S3_LOGS_ENABLED` | `false` | Enables Pluggable Storage with build logs on S3 (`AMAZON_S3`). Bucket, prefix and ServiceAccount come from `S3_LOGS_*`; create them first with `07-createS3PlugableStorage-LogsBucket.sh`. |
+| `CHANNEL_PINGER_ENABLED` | `false` | Sets `-Dhudson.slaves.ChannelPinger.pingIntervalSeconds` on the operations center and managed controllers. `CHANNEL_PINGER_INTERVAL_SECONDS` defaults to `1200`. |
+| `MCP_ENABLED` | `false` | Deploys the MCP Router with OAuth; see [MCP Router](#mcp-router-optional). |
+
+`05a-installCloudBees-CasCBundleRetriever.sh` and `05c-installCloudBees-PlugableStorage.sh` were removed; their functionality is now these flags.
+
+## S3 Storage (optional)
+
+Three independent buckets, each with a create and a delete script. All grant access through **EKS Pod Identity** (no static keys, no node-role changes) and require `aws` CLI v2 and the Pod Identity Agent add-on from `01-createCluster.sh`.
+
+| Purpose | Create / delete | Consumer | Key variables (see [`.env-template`](.env-template)) |
+|---|---|---|---|
+| Backups | `07-createS3BackupBucket.sh` / `07-deleteS3BackupBucket.sh` | Managed controllers | `S3_BACKUP_BUCKET`, `S3_BACKUP_EXPIRE_DAYS`, `S3_BACKUP_SA_NAMESPACE`, `S3_BACKUP_POD_SELECTOR`, `S3_BACKUP_SA_NAMES` |
+| Artifacts | `07-createS3ArtifactStorage.sh` / `07-deleteS3ArtifactStorage.sh` | *Artifact Manager on S3* plugin on controllers | `S3_ARTIFACTS_BUCKET`, `S3_ARTIFACTS_PREFIX`, `S3_ARTIFACTS_EXPIRE_DAYS`, `S3_ARTIFACTS_SA_NAMES`, `S3_ARTIFACTS_POLICY_SCOPE` |
+| Build logs | `07-createS3PlugableStorage-LogsBucket.sh` / `07-deleteS3PlugableStorage-LogsBucket.sh` | Pluggable Storage service (`S3_LOGS_ENABLED=true`) | `S3_LOGS_BUCKET`, `S3_LOGS_PREFIX`, `S3_LOGS_EXPIRE_DAYS`, `S3_LOGS_SA_NAME` |
+
+Behavior worth knowing:
+
+- **One association per ServiceAccount.** If a ServiceAccount already has a Pod Identity association, the script keeps its role and attaches its policy to that role rather than replacing it, so the backup and artifacts policies can share a controller's role.
+- **No wildcard matching.** Re-run the backup/artifacts create script after adding a controller, and restart pods that received a new association.
+- **Artifacts policy scope.** Defaults to `s3:*` on the one bucket. `S3_ARTIFACTS_POLICY_SCOPE=any` widens it to every bucket in the account; avoid it. `s3:ListAllMyBuckets` on `*` is always granted because the plugin's client lists buckets (names only).
+- **Controller configuration is manual.** For artifacts, set the bucket and prefix printed by the script in *Manage Jenkins > System > Artifact Management for Builds* and *Manage Jenkins > AWS*, and leave credentials unset so the default credential chain (Pod Identity) is used.
+- **Delete scripts are destructive.** They permanently remove the bucket and all objects after a confirmation prompt. Back up anything you need first.
+- **Ordering.** The logs bucket can be created before the ServiceAccount exists (the Helm chart creates it), but the pluggable storage pod must be restarted afterward to pick up credentials. Tear down the S3 buckets before `01-deleteCluster.sh`.
 
 ## MCP Router (optional)
 
-Set `MCP_ENABLED=true` in `.env` before running `05-installCloudBees.sh` to deploy the CloudBees CI MCP Router with OAuth through the `cloudbees-core` chart (`McpRouter.enabled`, `OperationsCenter.OAuthServer.Enabled`, upstream mode `AUTO`). Background, auth flow and chart values are in [`MCP.md`](../../docs/MCP.md).
+Set `MCP_ENABLED=true` in `.env` before running `05-installCloudBees.sh` to deploy the CloudBees CI MCP Router with OAuth through the `cloudbees-core` chart (`McpRouter.enabled`, `OperationsCenter.OAuthServer.Enabled`, upstream mode `AUTO`). Background, auth flow and chart values are in [`01-MCP.md`](../../docs/01-MCP.md).
 
 | Variable | Default | Purpose |
 |---|---|---|
