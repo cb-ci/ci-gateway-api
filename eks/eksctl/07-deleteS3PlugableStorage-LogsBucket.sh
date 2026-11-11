@@ -3,7 +3,7 @@
 # 07-deleteS3PlugableStorage-LogsBucket.sh — Teardown for
 # 07-createS3PlugableStorage-LogsBucket.sh.
 # DESTRUCTIVE: permanently deletes the bucket and ALL objects in it (build logs),
-# plus the IAM policy, role and Pod Identity association. Asks for confirmation.
+# plus the IAM policy, role and Pod Identity association. Asks for confirmation (--yes skips it).
 # -----------------------------------------------------------------------------
 set -euo pipefail
 
@@ -12,6 +12,15 @@ source ./.env
 log()     { printf '\033[1;34m[INFO]\033[0m  %s\n' "$*"; }
 success() { printf '\033[1;32m[OK]\033[0m    %s\n' "$*"; }
 error()   { printf '\033[1;31m[ERROR]\033[0m %s\n' "$*" >&2; exit 1; }
+
+ASSUME_YES=false
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --yes|-y) ASSUME_YES=true ;;
+    *)        error "unknown flag '$1' (supported: --yes)" ;;
+  esac
+  shift
+done
 
 AWS_REGION="${AWS_DEFAULT_REGION:-us-east-1}"
 AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
@@ -27,8 +36,10 @@ echo "This will permanently delete:"
 echo "  - s3://${S3_LOGS_BUCKET} and all its contents"
 echo "  - IAM policy ${S3_LOGS_POLICY_NAME}, role ${S3_LOGS_ROLE_NAME}"
 echo "  - Pod identity association ${S3_LOGS_SA_NAMESPACE}/${S3_LOGS_SA_NAME}"
-read -r -p "Type the bucket name to confirm: " CONFIRM
-[[ "${CONFIRM}" == "${S3_LOGS_BUCKET}" ]] || error "Confirmation did not match; aborting."
+if [[ "${ASSUME_YES}" != true ]]; then
+  read -r -p "Type the bucket name to confirm: " CONFIRM
+  [[ "${CONFIRM}" == "${S3_LOGS_BUCKET}" ]] || error "Confirmation did not match; aborting."
+fi
 
 # --- Pod Identity association ---
 ASSOC=$(aws eks list-pod-identity-associations --cluster-name "${CLUSTER_NAME}" \

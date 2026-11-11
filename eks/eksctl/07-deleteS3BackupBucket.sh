@@ -5,7 +5,7 @@
 # IAM policy (detached from every role using it, including the node role). The
 # backup role and its Pod Identity associations are deleted only if the role has
 # no other policy attached (e.g. the artifacts policy); otherwise they are kept.
-# Asks for confirmation first.
+# Asks for confirmation first (--yes skips it).
 # -----------------------------------------------------------------------------
 set -euo pipefail
 
@@ -14,6 +14,15 @@ source ./.env
 log()     { printf '\033[1;34m[INFO]\033[0m  %s\n' "$*"; }
 success() { printf '\033[1;32m[OK]\033[0m    %s\n' "$*"; }
 error()   { printf '\033[1;31m[ERROR]\033[0m %s\n' "$*" >&2; exit 1; }
+
+ASSUME_YES=false
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --yes|-y) ASSUME_YES=true ;;
+    *)        error "unknown flag '$1' (supported: --yes)" ;;
+  esac
+  shift
+done
 
 AWS_REGION="${AWS_DEFAULT_REGION:-us-east-1}"
 AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
@@ -28,8 +37,10 @@ echo "This will permanently delete:"
 echo "  - s3://${S3_BACKUP_BUCKET} and all its contents"
 echo "  - IAM policy ${S3_BACKUP_POLICY_NAME} (detached from every role using it)"
 echo "  - IAM role ${S3_BACKUP_ROLE_NAME} and its pod identity associations, if nothing else uses it"
-read -r -p "Type the bucket name to confirm: " CONFIRM
-[[ "${CONFIRM}" == "${S3_BACKUP_BUCKET}" ]] || error "Confirmation did not match; aborting."
+if [[ "${ASSUME_YES}" != true ]]; then
+  read -r -p "Type the bucket name to confirm: " CONFIRM
+  [[ "${CONFIRM}" == "${S3_BACKUP_BUCKET}" ]] || error "Confirmation did not match; aborting."
+fi
 
 # --- Detach the policy from every role, delete it ---
 if aws iam get-policy --policy-arn "${POLICY_ARN}" >/dev/null 2>&1; then

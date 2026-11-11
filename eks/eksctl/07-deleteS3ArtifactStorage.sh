@@ -3,7 +3,7 @@
 # 07-deleteS3ArtifactStorage.sh — Teardown for 07-createS3ArtifactStorage.sh.
 # DESTRUCTIVE: permanently deletes the bucket and ALL objects in it (build
 # artifacts), plus the IAM policy, the artifacts role and its Pod Identity
-# associations. Asks for confirmation.
+# associations. Asks for confirmation (--yes skips it).
 #
 # Pod Identity associations that point to ANOTHER role (e.g. controller1/hahs on
 # the backup role) are NOT deleted: only the artifacts policy is detached from
@@ -16,6 +16,15 @@ source ./.env
 log()     { printf '\033[1;34m[INFO]\033[0m  %s\n' "$*"; }
 success() { printf '\033[1;32m[OK]\033[0m    %s\n' "$*"; }
 error()   { printf '\033[1;31m[ERROR]\033[0m %s\n' "$*" >&2; exit 1; }
+
+ASSUME_YES=false
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --yes|-y) ASSUME_YES=true ;;
+    *)        error "unknown flag '$1' (supported: --yes)" ;;
+  esac
+  shift
+done
 
 AWS_REGION="${AWS_DEFAULT_REGION:-us-east-1}"
 AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
@@ -30,8 +39,10 @@ echo "This will permanently delete:"
 echo "  - s3://${S3_ARTIFACTS_BUCKET} and all its contents"
 echo "  - IAM policy ${S3_ARTIFACTS_POLICY_NAME} (detached from every role using it)"
 echo "  - IAM role ${S3_ARTIFACTS_ROLE_NAME} and the pod identity associations that use it"
-read -r -p "Type the bucket name to confirm: " CONFIRM
-[[ "${CONFIRM}" == "${S3_ARTIFACTS_BUCKET}" ]] || error "Confirmation did not match; aborting."
+if [[ "${ASSUME_YES}" != true ]]; then
+  read -r -p "Type the bucket name to confirm: " CONFIRM
+  [[ "${CONFIRM}" == "${S3_ARTIFACTS_BUCKET}" ]] || error "Confirmation did not match; aborting."
+fi
 
 # --- Pod Identity associations that use the artifacts role -------------------
 ROLE_ARN=$(aws iam get-role --role-name "${S3_ARTIFACTS_ROLE_NAME}" \
