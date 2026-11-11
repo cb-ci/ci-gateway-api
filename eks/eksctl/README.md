@@ -77,19 +77,23 @@ of it. For teardown order, see [Execution Sequence (Teardown)](#execution-sequen
 
 ## Execution Sequence (Teardown)
 
+> **Status: not yet validated end-to-end.** `01-deleteCluster.sh` and `06-deleteExternalDNS.sh` have only been syntax-checked. Run `--dry-run` first and try a full teardown on a throwaway cluster. Unverified: how the external-dns Pod Identity role interacts with the identically purposed entry in [`eksctl-config.yaml.tpl`](eksctl-config.yaml.tpl), and whether the ACM certificates' DNS-validation CNAME records are removed with the certificates. Check the orphan report after the first run, then delete this note.
+
 [`01-deleteCluster.sh`](01-deleteCluster.sh) **orchestrates the whole teardown**: it calls the individual delete scripts in reverse order of creation, deletes the EKS cluster, and finishes with a read-only orphan scan. You normally don't run the other delete scripts by hand.
 
+**Prerequisites:** `aws`, `eksctl`, `kubectl`, `helm`, `jq` and `envsubst` on `PATH`; a valid AWS session (`00-login.sh`); and `kubectl` access to the cluster (`KUBECONFIG` from `.env`). Without `kubectl` access the Kubernetes-side steps are skipped, which can orphan the ALB and ENIs, so the plan warns you.
+
 ```
-01-deleteCluster.sh
+01-deleteCluster.sh   (each step runs only if its resources are detected)
    │
-   ├─ 07-deleteEC2WithController.sh --delete-cert
+   ├─ 07-deleteEC2WithController.sh --delete-cert          optional add-on
    ├─ 05-deleteCloudBees.sh --delete-data --delete-namespace
-   ├─ 07-deleteS3PlugableStorage-LogsBucket.sh   (DESTRUCTIVE)
-   ├─ 07-deleteS3ArtifactStorage.sh              (DESTRUCTIVE)
-   ├─ 07-deleteS3BackupBucket.sh                 (DESTRUCTIVE)
+   ├─ 07-deleteS3PlugableStorage-LogsBucket.sh   (DESTRUCTIVE)   optional
+   ├─ 07-deleteS3ArtifactStorage.sh              (DESTRUCTIVE)   optional
+   ├─ 07-deleteS3BackupBucket.sh                 (DESTRUCTIVE)   optional
    ├─ 04-deleteEnvoy.sh --delete-crds --delete-cert   (Ingress → ALB first)
    ├─ 06-deleteExternalDNS.sh                    (waits for Route53 record sync)
-   ├─ 02-delete-efs-filesystem.sh
+   ├─ 02-delete-efs-filesystem.sh                (no prompt)     optional
    ├─ eksctl delete cluster
    └─ orphan report (read-only)
 ```
@@ -232,17 +236,17 @@ agent pods will stay `Pending` indefinitely.
 | 01 | [`01-deleteCluster.sh`](01-deleteCluster.sh) | Orchestrates the full teardown by calling the delete scripts in reverse order, then `eksctl delete cluster`, then a read-only orphan scan. Supports `--dry-run`, `--yes`, `--report-only`. See [Execution Sequence (Teardown)](#execution-sequence-teardown). |
 | 01 | [`01-upgradeCluster.sh`](01-upgradeCluster.sh) | Upgrades the cluster one Kubernetes minor version at a time: control plane (`eksctl upgrade cluster`), EKS-managed add-ons (`eksctl update addon`), then managed node groups (`eksctl upgrade nodegroup`). Refreshes kubeconfig and bumps the `version:` field in [`eksctl-config.yaml.tpl`](eksctl-config.yaml.tpl) to match. Defaults to current+1 minor version; override with `--version`. |
 | 02 | [`02-create-efs-filesystem.sh`](02-create-efs-filesystem.sh) | Creates an EFS file system + mount target + security group for shared storage, verifies the `aws-efs-csi-driver` IAM role, deploys a StorageClass, and runs an end-to-end test PVC/Pod. |
-| 02 | [`02-delete-efs-filesystem.sh`](02-delete-efs-filesystem.sh) | Removes everything the EFS create script made: test namespace, StorageClass, fallback IAM role, mount targets, file system, and security group. |
+| 02 | [`02-delete-efs-filesystem.sh`](02-delete-efs-filesystem.sh) | Removes everything the EFS create script made: test namespace, StorageClass, fallback IAM role, mount targets, file system, and security group. Has no flags and no confirmation prompt. |
 | 03 | [`03-installAwsLbController.sh`](03-installAwsLbController.sh) | Installs the AWS Load Balancer Controller via Helm using the IRSA ServiceAccount eksctl already created, applies its CRDs, and verifies public subnets carry the `kubernetes.io/role/elb=1` tag the controller needs to place an ALB. |
 | 03 | [`03-installClusterAutoscaler.sh`](03-installClusterAutoscaler.sh) | Installs Kubernetes Cluster Autoscaler via Helm using the IRSA ServiceAccount eksctl created (`wellKnownPolicies.autoScaler`), matches the image tag to the cluster's live Kubernetes minor version, and verifies both node groups' ASGs are tagged for auto-discovery (automatic since `minSize != maxSize` on `controllers`/`agents`). Also grants supplemental read-only RBAC on the `resource.k8s.io` API group (Dynamic Resource Allocation objects), which newer autoscaler builds watch unconditionally but the Helm chart's bundled ClusterRole doesn't grant. Independent of the ALB/Envoy chain — run any time after [`01-createCluster.sh`](01-createCluster.sh). |
 | 04 | [`04-installEnvoy.sh`](04-installEnvoy.sh) | Installs Envoy Gateway, requests/validates the ACM certificate for `CJOC_HOST_NAME` (with automated Route53 DNS validation), and creates the Gateway/GatewayClass/HTTPRoute plumbing plus the `cjoc-alb` Ingress that provisions the **shared internet-facing ALB**. |
-| 04 | [`04-deleteEnvoy.sh`](04-deleteEnvoy.sh) | Tears down the Ingress (deprovisioning the ALB), Gateway API resources, and the Envoy Gateway Helm release. Leaves the CloudBees namespace, CRDs, and ACM certificate in place unless `--delete-crds` / `--delete-cert` are passed. |
+| 04 | [`04-deleteEnvoy.sh`](04-deleteEnvoy.sh) | Tears down the Ingress (deprovisioning the ALB), Gateway API resources, and the Envoy Gateway Helm release. Leaves the CloudBees namespace, CRDs, and ACM certificate in place unless `--delete-crds` / `--delete-cert` are passed. `--yes` skips the prompt. |
 | 05 | [`05-installCloudBees.sh`](05-installCloudBees.sh) | Installs CloudBees CI (Operations Center / CJOC) via the `cloudbees/cloudbees-core` Helm chart, wired to the Gateway from step 04, and waits for the Gateway to get an address. Optional parts are switched on in `.env` (see [Optional install flags](#optional-install-flags-05-installcloudbeessh)). |
-| 05 | [`05-deleteCloudBees.sh`](05-deleteCloudBees.sh) | Uninstalls the CloudBees CI Helm release and associated resources. |
+| 05 | [`05-deleteCloudBees.sh`](05-deleteCloudBees.sh) | Uninstalls the CloudBees CI Helm release and stops managed controllers, keeping their volumes by default. `--delete-data` also deletes the PVCs (JENKINS_HOME), `--delete-namespace` the namespaces (requires `--delete-data`), `--keep-controllers` leaves managed controllers running, `--yes` skips the prompt. |
 | 06 | [`06-installExternalDNS.sh`](06-installExternalDNS.sh) | Installs `external-dns` (via EKS Pod Identity) scoped to a least-privilege, hosted-zone-specific IAM policy, so Route53 A records for `CJOC_HOST_NAME` are created/kept in sync automatically from the Ingress. |
 | 06 | [`06-deleteExternalDNS.sh`](06-deleteExternalDNS.sh) | Waits for external-dns to remove the Route53 records for `CJOC_HOST_NAME` (deleting leftovers owned by this cluster's `txtOwnerId`), uninstalls the Helm release and namespace, then removes the Pod Identity association, IAM role (unless CloudFormation-managed) and IAM policy. Run after `04-deleteEnvoy.sh`. `--yes` skips the prompt. |
 | 07 | [`07-createEC2WithController.sh`](07-createEC2WithController.sh) | **Optional add-on.** Provisions a standalone Amazon Linux 2023 EC2 instance (Java 21 + Docker + systemd-managed CloudBees CI Client Controller container) and wires it into the *same shared ALB* from step 04 via a new host-header listener rule, its own ACM certificate (SNI), a dedicated target group/security group/IAM instance profile, and a Route53 alias record — without creating a second ALB. Also adds a scoped 443 rule to the EKS cluster's own security group so this instance can reach the Kubernetes API server (needed because `clusterEndpoints.privateAccess: true` routes in-VPC clients through that security group, not the public endpoint). |
-| 07 | [`07-deleteEC2WithController.sh`](07-deleteEC2WithController.sh) | Tears down everything the EC2 create script added (listener rule, target group, instance, the cluster-security-group's 443 rule, security group, IAM role/profile, Route53 record; ACM cert opt-in via `--delete-cert`) while explicitly leaving the VPC, EKS cluster, and shared ALB/listener/default certificate untouched. |
+| 07 | [`07-deleteEC2WithController.sh`](07-deleteEC2WithController.sh) | Tears down everything the EC2 create script added (listener rule, target group, instance, the cluster-security-group's 443 rule, security group, IAM role/profile, Route53 record; ACM cert opt-in via `--delete-cert`) while explicitly leaving the VPC, EKS cluster, and shared ALB/listener/default certificate untouched. `--yes` skips the prompt. |
 | 07 | [`07-stopEC2Instance.sh`](07-stopEC2Instance.sh) | Stops (does not terminate) the EC2 Client Controller instance to park it and save EC2 compute cost, leaving its security group, IAM role, target group, listener rule, ACM cert, Route53 record, and EBS volume untouched. Waits for `stopped` by default (`--no-wait`, `--yes`). |
 | 07 | [`07-startEC2Instance.sh`](07-startEC2Instance.sh) | Starts a previously stopped EC2 Client Controller instance back up so the target group reports healthy again. Waits for `running` by default (`--no-wait`, `--yes`). |
 | 07 | [`07-createS3BackupBucket.sh`](07-createS3BackupBucket.sh) | **Optional.** Creates a CloudBees CI backup bucket (public access blocked, lifecycle expiry) and grants every managed controller access via EKS Pod Identity. Controller ServiceAccounts are discovered from pods labelled `com.cloudbees.cje.type=master`. Re-run after adding a controller. |
