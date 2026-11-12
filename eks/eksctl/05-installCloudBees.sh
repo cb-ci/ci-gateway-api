@@ -147,6 +147,12 @@ fi
 HELM_DEBUG_ARGS=()
 [[ "${HELM_DEBUG:-false}" == "true" ]] && HELM_DEBUG_ARGS=(--debug)
 
+# Pin the chart version; empty or "latest" installs the newest chart.
+CHART_VERSION_ARGS=()
+if [[ -n "${CLOUDBEES_CHART_VERSION:-}" && "${CLOUDBEES_CHART_VERSION}" != "latest" ]]; then
+  CHART_VERSION_ARGS=(--version "${CLOUDBEES_CHART_VERSION}")
+fi
+
 # --- Helm Deployment ---
 log "Updating Helm repositories..."
 helm repo add cloudbees https://charts.cloudbees.com/public/cloudbees || true
@@ -155,6 +161,7 @@ helm repo update
 log "Deploying CloudBees CI via Helm..."
 helm upgrade --install cloudbees-core-envoy cloudbees/cloudbees-core \
   --namespace "${NAMESPACE_CLOUDBEES}" \
+  ${CHART_VERSION_ARGS[@]+"${CHART_VERSION_ARGS[@]}"} \
   --set Gateway.Enabled=true \
   --set Gateway.Name="${GATEWAY_NAME}" \
   --set Gateway.SectionName=https \
@@ -167,12 +174,11 @@ helm upgrade --install cloudbees-core-envoy cloudbees/cloudbees-core \
   --set Agents.SeparateNamespace.Enabled=true \
   --set Agents.SeparateNamespace.Create=true \
   --set Persistence.StorageClass="${CLOUDBEES_STORAGE_CLASS}" \
-  --set Common.image.tag='latest' \
   ${CASC_ARGS[@]+"${CASC_ARGS[@]}"} \
   ${PLUGGABLE_STORAGE_ARGS[@]+"${PLUGGABLE_STORAGE_ARGS[@]}"} \
   ${MCP_ARGS[@]+"${MCP_ARGS[@]}"} \
   ${HELM_DEBUG_ARGS[@]+"${HELM_DEBUG_ARGS[@]}"}
-
+ # --set Common.image.tag='latest' \
  # --set Agents.ImagePullSecrets=<secret> \
  # --set OperationsCenter.ImagePullSecrets=<secret> 
 

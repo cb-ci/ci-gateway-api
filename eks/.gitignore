@@ -1,3 +1,4 @@
 /*/kubecfg*
 /*/.env
 /*/eksctl-config.yaml
+/*/eksctl/.nodepool-scale-state.json
