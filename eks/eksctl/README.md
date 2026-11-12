@@ -37,16 +37,30 @@ See [`.env-template`](.env-template) for the full list of variables.
 
 ## Execution Sequence
 
+[`01-createAll.sh`](01-createAll.sh) **runs the whole sequence below** by calling the individual scripts in order. You normally don't run them by hand.
+
+```bash
+source .env
+./01-createAll.sh --dry-run                        # print the plan only
+./01-createAll.sh                                  # core steps, confirm each one [Y/n/q]
+./01-createAll.sh --install-optional-resources     # also EFS, S3 buckets, EC2 controller, remote-agent SA
+./01-createAll.sh --yes                            # no questions (combine with the flag above as needed)
 ```
-00-login.sh
+
+- **Authentication first.** The script checks `aws sts get-caller-identity` and aborts if your session is invalid. Authenticate (e.g. `aws sso login`) before running it; `00-login.sh` only sources `.env`.
+- **Optional steps** (`02-*`, all `07-*` create scripts, `08-*`) run only with `--install-optional-resources`. Their use inside `05-installCloudBees.sh` is still controlled by `.env` (`S3_LOGS_ENABLED`, `CASC_ENABLED`, `MCP_ENABLED`, ...).
+- **Re-runs.** Non-idempotent steps (cluster, EFS, the three S3 buckets, EC2 controller, remote-agent ServiceAccount) are detected and skipped when they already exist. Helm-based steps always run (`helm upgrade --install`), so changed `.env` flags are applied. The first failing step aborts the run; fix the cause and re-run.
+- **Backup bucket runs last**, because `07-createS3BackupBucket.sh` discovers controller ServiceAccounts. Re-run it by hand after adding controllers.
+- **Status:** only syntax-checked so far. Try `--dry-run` and a full run on a throwaway cluster first.
+
+```
+00-login.sh                        (sources .env; authenticate to AWS beforehand)
    │
    ▼
 01-createCluster.sh                (EKS cluster, VPC, node groups)
    │
    ├── 02-create-efs-filesystem.sh          (optional: shared EFS storage)
-   ├── 03-installClusterAutoscaler.sh       (independent, any time after 01)
-   ├── 07-createS3BackupBucket.sh           (optional, independent; re-run after
-   └── 07-createS3ArtifactStorage.sh         adding controllers; see S3 Storage)
+   └── 03-installClusterAutoscaler.sh       (independent, any time after 01)
    │
    ▼
 03-installAwsLbController.sh       (AWS Load Balancer Controller)
@@ -56,6 +70,7 @@ See [`.env-template`](.env-template) for the full list of variables.
    │
    ├── 07-createS3PlugableStorage-LogsBucket.sh
    │   (optional — run BEFORE 05 when S3_LOGS_ENABLED=true)
+   ├── 07-createS3ArtifactStorage.sh        (optional, independent)
    ▼
 05-installCloudBees.sh             (CloudBees CI / CJOC via Helm)
    │                                optional flags in .env: CASC_ENABLED,
@@ -64,8 +79,10 @@ See [`.env-template`](.env-template) for the full list of variables.
    ▼
 06-installExternalDNS.sh           (Route53 record automation for CJOC)
    │
-   ▼
-07-createEC2WithController.sh      (optional: standalone EC2 Client Controller)
+   ├── 07-createEC2WithController.sh        (optional: standalone EC2 Client Controller)
+   ├── 08-createServiceAccountforRemoteAgents.sh   (optional)
+   └── 07-createS3BackupBucket.sh           (optional; needs controllers to exist,
+                                             re-run after adding controllers)
 ```
 
 ### Operational Scripts (Day-2)
@@ -81,14 +98,14 @@ The following scripts are **operational** — run them any time after the initia
 
 ## Execution Sequence (Teardown)
 
-> **Status: not yet validated end-to-end.** `01-deleteCluster.sh` and `06-deleteExternalDNS.sh` have only been syntax-checked. Run `--dry-run` first and try a full teardown on a throwaway cluster. Unverified: how the external-dns Pod Identity role interacts with the identically purposed entry in [`eksctl-config.yaml.tpl`](eksctl-config.yaml.tpl), and whether the ACM certificates' DNS-validation CNAME records are removed with the certificates. Check the orphan report after the first run, then delete this note.
+> **Status: not yet validated end-to-end.** `09-deleteAll.sh` and `06-deleteExternalDNS.sh` have only been syntax-checked. Run `--dry-run` first and try a full teardown on a throwaway cluster. Unverified: how the external-dns Pod Identity role interacts with the identically purposed entry in [`eksctl-config.yaml.tpl`](eksctl-config.yaml.tpl), and whether the ACM certificates' DNS-validation CNAME records are removed with the certificates. Check the orphan report after the first run, then delete this note.
 
-[`01-deleteCluster.sh`](01-deleteCluster.sh) **orchestrates the whole teardown**: it calls the individual delete scripts in reverse order of creation, deletes the EKS cluster, and finishes with a read-only orphan scan. You normally don't run the other delete scripts by hand.
+[`09-deleteAll.sh`](09-deleteAll.sh) **orchestrates the whole teardown**: it calls the individual delete scripts in reverse order of creation, deletes the EKS cluster, and finishes with a read-only orphan scan. You normally don't run the other delete scripts by hand.
 
 **Prerequisites:** `aws`, `eksctl`, `kubectl`, `helm`, `jq` and `envsubst` on `PATH`; a valid AWS session (`00-login.sh`); and `kubectl` access to the cluster (`KUBECONFIG` from `.env`). Without `kubectl` access the Kubernetes-side steps are skipped, which can orphan the ALB and ENIs, so the plan warns you.
 
 ```
-01-deleteCluster.sh   (each step runs only if its resources are detected)
+09-deleteAll.sh   (each step runs only if its resources are detected)
    │
    ├─ 07-deleteEC2WithController.sh --delete-cert          optional add-on
    ├─ 05-deleteCloudBees.sh --delete-data --delete-namespace
@@ -104,10 +121,10 @@ The following scripts are **operational** — run them any time after the initia
 
 ```bash
 source .env
-./01-deleteCluster.sh --dry-run     # print the plan only
-./01-deleteCluster.sh               # plan + type the cluster name to confirm
-./01-deleteCluster.sh --yes         # skip the typed confirmation (automation)
-./01-deleteCluster.sh --report-only # only scan for leftover resources
+./09-deleteAll.sh --dry-run     # print the plan only
+./09-deleteAll.sh               # plan + type the cluster name to confirm
+./09-deleteAll.sh --yes         # skip the typed confirmation (automation)
+./09-deleteAll.sh --report-only # only scan for leftover resources
 ```
 
 - **Auto-detection.** Each step runs only if its resources exist (EC2 add-on, Helm releases, buckets, EFS, ACM certs, IAM) and is shown as `[DELETE]` or `[skip]` in the plan. If the cluster is gone, the AWS-side steps still run.
@@ -233,11 +250,12 @@ agent pods will stay `Pending` indefinitely.
 
 | Order | Script | Purpose |
 | --- | --- | --- |
-| 00 | [`00-login.sh`](00-login.sh) | Authenticates the AWS CLI via `aws sso login`. Run this first in any new shell/session. |
+| 00 | [`00-login.sh`](00-login.sh) | Only sources `.env` (the `aws sso login` / `AWS_*` key export lines are comments). Authenticate to AWS yourself before running any script. |
+| 01 | [`01-createAll.sh`](01-createAll.sh) | Runs the full creation sequence by calling the scripts below in order. Flags: `--install-optional-resources`, `--yes` (otherwise asks `[Y/n/q]` per step), `--dry-run`. Skips existing non-idempotent resources, aborts on the first failure. See [Execution Sequence](#execution-sequence). |
 | 01 | [`01-createCluster.sh`](01-createCluster.sh) | Renders [`eksctl-config.yaml.tpl`](eksctl-config.yaml.tpl) and creates the EKS cluster, VPC, managed node groups (`controllers` and `agents`, both tainted for workload isolation; `system`, untainted, for cluster add-ons — see [Node Groups & Workload Isolation](#node-groups--workload-isolation)), OIDC/IRSA and Pod Identity, and the EBS/EFS CSI + Pod Identity Agent add-ons. Migrates to EKS Pod Identity and writes kubeconfig. |
 | 01 | [`01-scaleDonwNodePools.sh`](01-scaleDonwNodePools.sh) | Scales every managed node group to 0 to park the environment (saves EC2 cost only — control plane, NAT, ALB, EBS/EFS keep billing). Saves current sizes to [`.nodepool-scale-state.json`](.nodepool-scale-state.json). |
 | 01 | [`01-scaleUpNodePools.sh`](01-scaleUpNodePools.sh) | Restores node groups to the sizes recorded by the scale-down script (or explicit `--nodes*` flags / config defaults if that state file is missing). |
-| 01 | [`01-deleteCluster.sh`](01-deleteCluster.sh) | Orchestrates the full teardown by calling the delete scripts in reverse order, then `eksctl delete cluster`, then a read-only orphan scan. Supports `--dry-run`, `--yes`, `--report-only`. See [Execution Sequence (Teardown)](#execution-sequence-teardown). |
+| 01 | [`01-deleteCluster.sh`](01-deleteCluster.sh) | Bare `eksctl delete cluster` for the config in this directory. No detection of add-on resources, no orphan scan; use [`09-deleteAll.sh`](09-deleteAll.sh) for a proper teardown. |
 | 01 | [`01-upgradeCluster.sh`](01-upgradeCluster.sh) | Upgrades the cluster one Kubernetes minor version at a time: control plane (`eksctl upgrade cluster`), EKS-managed add-ons (`eksctl update addon`), then managed node groups (`eksctl upgrade nodegroup`). Refreshes kubeconfig and bumps the `version:` field in [`eksctl-config.yaml.tpl`](eksctl-config.yaml.tpl) to match. Defaults to current+1 minor version; override with `--version`. |
 | 02 | [`02-create-efs-filesystem.sh`](02-create-efs-filesystem.sh) | Creates an EFS file system + mount target + security group for shared storage, verifies the `aws-efs-csi-driver` IAM role, deploys a StorageClass, and runs an end-to-end test PVC/Pod. |
 | 02 | [`02-delete-efs-filesystem.sh`](02-delete-efs-filesystem.sh) | Removes everything the EFS create script made: test namespace, StorageClass, fallback IAM role, mount targets, file system, and security group. Has no flags and no confirmation prompt. |
@@ -254,12 +272,13 @@ agent pods will stay `Pending` indefinitely.
 | 07 | [`07-stopEC2Instance.sh`](07-stopEC2Instance.sh) | Stops (does not terminate) the EC2 Client Controller instance to park it and save EC2 compute cost, leaving its security group, IAM role, target group, listener rule, ACM cert, Route53 record, and EBS volume untouched. Waits for `stopped` by default (`--no-wait`, `--yes`). |
 | 07 | [`07-startEC2Instance.sh`](07-startEC2Instance.sh) | Starts a previously stopped EC2 Client Controller instance back up so the target group reports healthy again. Waits for `running` by default (`--no-wait`, `--yes`). |
 | 07 | [`07-createS3BackupBucket.sh`](07-createS3BackupBucket.sh) | **Optional.** Creates a CloudBees CI backup bucket (public access blocked, lifecycle expiry) and grants every managed controller access via EKS Pod Identity. Controller ServiceAccounts are discovered from pods labelled `com.cloudbees.cje.type=master`. Re-run after adding a controller. |
-| 07 | [`07-deleteS3BackupBucket.sh`](07-deleteS3BackupBucket.sh) | **Destructive.** Deletes the backup bucket and all objects, plus the IAM policy. Keeps the role and associations if another policy (e.g. artifacts) is still attached. Asks for confirmation. |
+| 07 | [`07-deleteS3BackupBucket.sh`](07-deleteS3BackupBucket.sh) | **Destructive.** Deletes the backup bucket and all objects, plus the IAM policy (all policy versions). A role (backup or artifacts) and its associations are removed only once no policy is attached; otherwise they are kept. Asks for confirmation. |
 | 07 | [`07-createS3ArtifactStorage.sh`](07-createS3ArtifactStorage.sh) | **Optional.** Creates the bucket for the *Artifact Manager on S3* plugin and grants the controller ServiceAccounts access via Pod Identity instead of IAM-user access keys. Policy is scoped to this bucket by default. |
-| 07 | [`07-deleteS3ArtifactStorage.sh`](07-deleteS3ArtifactStorage.sh) | **Destructive.** Deletes the artifacts bucket and all objects, the policy, role and its associations. Associations that point at another role are kept; only the artifacts policy is detached from that role. |
+| 07 | [`07-deleteS3ArtifactStorage.sh`](07-deleteS3ArtifactStorage.sh) | **Destructive.** Deletes the artifacts bucket and all objects and the policy. The artifacts and backup roles can be shared, so a role and its associations are removed only once no policy is attached; otherwise the role is kept and only the artifacts policy is detached. Whichever of the two delete scripts runs last removes the shared role. |
 | 07 | [`07-createS3PlugableStorage-LogsBucket.sh`](07-createS3PlugableStorage-LogsBucket.sh) | **Optional.** Creates the bucket for Pluggable Storage (Pipeline build logs) and grants the `pluggable-storage-service` ServiceAccount access via Pod Identity. Run before `05-installCloudBees.sh` with `S3_LOGS_ENABLED=true`. |
 | 07 | [`07-deleteS3PlugableStorage-LogsBucket.sh`](07-deleteS3PlugableStorage-LogsBucket.sh) | **Destructive.** Deletes the logs bucket and all build logs, plus the policy, role and association. Asks for confirmation. |
 | 08 | [`08-createServiceAccountforRemoteAgents.sh`](08-createServiceAccountforRemoteAgents.sh) | Creates a `jenkins-agent` ServiceAccount, Role, and RoleBinding in the `cbci-builds` namespace (get/list/watch/create/delete/update/patch on pods, pods/log, pods/exec, events, and PVCs), plus a non-expiring legacy-style Secret token, and prints the decoded token — used to configure a Jenkins Kubernetes Cloud (e.g. from a remote/standalone Controller) so it can provision agent pods in this cluster. |
+| 09 | [`09-deleteAll.sh`](09-deleteAll.sh) | Orchestrates the full teardown (counterpart of [`01-createAll.sh`](01-createAll.sh)): calls the delete scripts in reverse order, then `eksctl delete cluster`, then a read-only orphan scan. Supports `--dry-run`, `--yes`, `--report-only`. See [Execution Sequence (Teardown)](#execution-sequence-teardown). |
 
 ## Optional install flags (`05-installCloudBees.sh`)
 
@@ -286,12 +305,12 @@ Three independent buckets, each with a create and a delete script. All grant acc
 
 Behavior worth knowing:
 
-- **One association per ServiceAccount.** If a ServiceAccount already has a Pod Identity association, the script keeps its role and attaches its policy to that role rather than replacing it, so the backup and artifacts policies can share a controller's role.
+- **One association per ServiceAccount.** If a ServiceAccount already has a Pod Identity association, the script keeps its role and attaches its policy to that role rather than replacing it, so the backup and artifacts policies can share a controller's role. The delete scripts honor this: a shared role is deleted only by the last script that detaches its final policy.
 - **No wildcard matching.** Re-run the backup/artifacts create script after adding a controller, and restart pods that received a new association.
 - **Artifacts policy scope.** Defaults to `s3:*` on the one bucket. `S3_ARTIFACTS_POLICY_SCOPE=any` widens it to every bucket in the account; avoid it. `s3:ListAllMyBuckets` on `*` is always granted because the plugin's client lists buckets (names only).
 - **Controller configuration is manual.** For artifacts, set the bucket and prefix printed by the script in *Manage Jenkins > System > Artifact Management for Builds* and *Manage Jenkins > AWS*, and leave credentials unset so the default credential chain (Pod Identity) is used.
-- **Delete scripts are destructive.** They permanently remove the bucket and all objects after you type the bucket name; `--yes` skips the prompt (used by `01-deleteCluster.sh`). Back up anything you need first.
-- **Ordering.** The logs bucket can be created before the ServiceAccount exists (the Helm chart creates it), but the pluggable storage pod must be restarted afterward to pick up credentials. `01-deleteCluster.sh` deletes them for you before the cluster.
+- **Delete scripts are destructive.** They permanently remove the bucket and all objects after you type the bucket name; `--yes` skips the prompt (used by `09-deleteAll.sh`). Back up anything you need first.
+- **Ordering.** The logs bucket can be created before the ServiceAccount exists (the Helm chart creates it), but the pluggable storage pod must be restarted afterward to pick up credentials. `09-deleteAll.sh` deletes them for you before the cluster.
 
 ## MCP Router (optional)
 

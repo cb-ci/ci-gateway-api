@@ -14,7 +14,7 @@
 #   - Helm release 'external-dns' and its namespace
 #   - EKS Pod Identity association for the external-dns ServiceAccount
 #   - IAM role EXTERNAL_DNS_ROLE_NAME (skipped if CloudFormation-managed, i.e.
-#     created by eksctl: 01-deleteCluster.sh removes those with the cluster)
+#     created by eksctl: 09-deleteAll.sh removes those with the cluster)
 #   - IAM policy EXTERNAL_DNS_POLICY_NAME
 #
 # WHAT THIS DOES NOT DELETE
@@ -164,7 +164,7 @@ if aws iam get-role --role-name "${EXTERNAL_DNS_ROLE_NAME}" &>/dev/null; then
   CFN_STACK=$(aws iam list-role-tags --role-name "${EXTERNAL_DNS_ROLE_NAME}" \
     --query "Tags[?Key=='aws:cloudformation:stack-name'].Value | [0]" --output text 2>/dev/null || true)
   if [[ -n "${CFN_STACK}" && "${CFN_STACK}" != "None" ]]; then
-    log "Role ${EXTERNAL_DNS_ROLE_NAME} belongs to CloudFormation stack ${CFN_STACK}; 01-deleteCluster.sh removes it."
+    log "Role ${EXTERNAL_DNS_ROLE_NAME} belongs to CloudFormation stack ${CFN_STACK}; 09-deleteAll.sh removes it."
   else
     for arn in $(aws iam list-attached-role-policies --role-name "${EXTERNAL_DNS_ROLE_NAME}" \
         --query 'AttachedPolicies[].PolicyArn' --output text); do

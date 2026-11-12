@@ -23,7 +23,7 @@ The goal of this project is to demonstrate how to replace traditional Ingress-ba
   * `eks/cloudbees-core/`: local Helm chart used for the CloudBees CI install.
 * **[casc/](./casc)**: CloudBees CasC bundles delivered to the operations center and controllers (`casc/cjoc`, `casc/controller-base`), plus bundle validation notes in [`casc/README.md`](./casc/README.md). Used by the `eksctl` path.
 * **[scripts/](./scripts)**: Shared utility library (`_functions.sh`), SSL generation, and test tools.
-* **[docs/](./docs)**: CloudBees CI MCP Router documentation: [`MCP.md`](./docs/MCP.md) (Helm and CasC configuration), [`MCP-TEST-PLAN.md`](./docs/MCP-TEST-PLAN.md) and the test run results.
+* **[docs/](./docs)**: CloudBees CI MCP Router documentation: [`01-MCP.md`](./docs/01-MCP.md) (Helm and CasC configuration), [`02-MCP-TEST-PLAN.md`](./docs/02-MCP-TEST-PLAN.md) and the test run results.
 
 ## Prerequisites
 
@@ -88,6 +88,10 @@ cd gke/envoy/
 # Example: EKS (eksctl); scripts are numbered in run order
 cd eks/eksctl/
 ./01-createCluster.sh
+
+# EKS (eksctl): run the whole sequence (add --install-optional-resources for EFS, S3, EC2, ...)
+./01-createAll.sh --dry-run
+./01-createAll.sh
 ```
 
 For the full EKS sequence, including the Terraform path, follow [`eks/README.md`](./eks/README.md).
@@ -99,7 +103,7 @@ These features are implemented only by the `eks/eksctl` scripts. The Terraform m
 | Feature | Switch in `.env` | Helper script | Details |
 | --- | --- | --- | --- |
 | **Pluggable storage** (Pipeline build logs on S3) | `S3_LOGS_ENABLED=true` | `07-createS3PlugableStorage-LogsBucket.sh` (teardown: `07-deleteS3PlugableStorage-LogsBucket.sh`) | [CloudBees docs](https://docs.cloudbees.com/docs/cloudbees-ci/latest/pipelines/cloudbees-pluggable-storage) |
-| **MCP Router + OAuth** | `MCP_ENABLED=true`, optional `MCP_UPSTREAM_MODE`, `MCP_RATE_LIMIT_*`, `MCP_CONTROLLERS_CACHE_TTL` | none, installed by `05-installCloudBees.sh` | [`docs/MCP.md`](./docs/MCP.md), [`docs/MCP-TEST-PLAN.md`](./docs/MCP-TEST-PLAN.md) |
+| **MCP Router + OAuth** | `MCP_ENABLED=true`, optional `MCP_UPSTREAM_MODE`, `MCP_RATE_LIMIT_*`, `MCP_CONTROLLERS_CACHE_TTL` | none, installed by `05-installCloudBees.sh` | [`docs/01-MCP.md`](./docs/01-MCP.md), [`docs/02-MCP-TEST-PLAN.md`](./docs/02-MCP-TEST-PLAN.md) |
 | **CasC bundles + retriever** | `CASC_ENABLED=true` with `CASC_SCM_REPO`, `CASC_SCM_BRANCH`, `CASC_SCM_BUNDLE_PATH_CJOC`, `CASC_SCM_USERNAME` and `CASC_SCM_PASSWORD` | none, installed by `05-installCloudBees.sh` | [`casc/`](./casc), [`casc/README.md`](./casc/README.md) |
 | **S3 backup bucket** | none | `07-createS3BackupBucket.sh` (teardown: `07-deleteS3BackupBucket.sh`) | Access for controllers through EKS Pod Identity. See the script header |
 | **S3 artifact storage** (Artifact Manager on S3) | none | `07-createS3ArtifactStorage.sh` (teardown: `07-deleteS3ArtifactStorage.sh`) | Access through EKS Pod Identity, no static keys. See the script header |

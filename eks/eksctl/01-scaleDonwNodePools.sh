@@ -22,7 +22,7 @@
 #     - the NAT gateway
 #     - the ALB
 #     - every EBS volume and the EFS file system
-#   To stop those, tear down properly (01-deleteCluster.sh and friends).
+#   To stop those, tear down properly (09-deleteAll.sh and friends).
 #
 # GRACEFUL SHUTDOWN
 #   Without --drain, instances are terminated by the ASG and pods get whatever

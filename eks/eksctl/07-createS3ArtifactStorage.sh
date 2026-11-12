@@ -60,7 +60,7 @@ TAGS_S3="TagSet=[{Key=cb-user,Value=${TAG_CB_USER}},{Key=cb-owner,Value=${TAG_CB
 TAGS_IAM="Key=cb-user,Value=${TAG_CB_USER} Key=cb-owner,Value=${TAG_CB_OWNER} Key=cb-environment,Value=${TAG_CB_ENVIRONMENT}"
 
 # --- 1. Bucket ---------------------------------------------------------------
-if aws s3api head-bucket --bucket "${S3_ARTIFACTS_BUCKET}" 2>/dev/null; then
+if aws s3api head-bucket --bucket "${S3_ARTIFACTS_BUCKET}" >/dev/null 2>&1; then
   success "Bucket already exists: ${S3_ARTIFACTS_BUCKET}"
 else
   log "Creating bucket ${S3_ARTIFACTS_BUCKET} in ${AWS_REGION}..."

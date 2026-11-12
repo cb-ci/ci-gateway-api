@@ -42,6 +42,34 @@ if [[ "${ASSUME_YES}" != true ]]; then
   [[ "${CONFIRM}" == "${S3_BACKUP_BUCKET}" ]] || error "Confirmation did not match; aborting."
 fi
 
+# Deletes ROLE and the pod identity associations that use it, but only when no
+# policy is attached any more (the backup and artifacts roles can be shared).
+cleanup_role() {
+  local role="$1" role_arn remaining assoc assoc_role_arn
+  role_arn=$(aws iam get-role --role-name "${role}" --query Role.Arn --output text 2>/dev/null || true)
+  [[ -n "${role_arn}" && "${role_arn}" != "None" ]] || return 0
+  remaining=$(aws iam list-attached-role-policies --role-name "${role}" \
+    --query 'length(AttachedPolicies)' --output text)
+  if [[ "${remaining}" -gt 0 ]]; then
+    log "Role ${role} still has ${remaining} other policy(ies); keeping it and its associations."
+    return 0
+  fi
+  for assoc in $(aws eks list-pod-identity-associations --cluster-name "${CLUSTER_NAME}" \
+      --region "${AWS_REGION}" --namespace "${NS}" \
+      --query "associations[].associationId" --output text 2>/dev/null || true); do
+    assoc_role_arn=$(aws eks describe-pod-identity-association --cluster-name "${CLUSTER_NAME}" \
+      --region "${AWS_REGION}" --association-id "${assoc}" \
+      --query association.roleArn --output text)
+    if [[ "${assoc_role_arn}" == "${role_arn}" ]]; then
+      log "Deleting pod identity association ${assoc}..."
+      aws eks delete-pod-identity-association --cluster-name "${CLUSTER_NAME}" \
+        --region "${AWS_REGION}" --association-id "${assoc}" >/dev/null
+    fi
+  done
+  log "Deleting IAM role ${role}..."
+  aws iam delete-role --role-name "${role}"
+}
+
 # --- Detach the policy from every role, delete it ---
 if aws iam get-policy --policy-arn "${POLICY_ARN}" >/dev/null 2>&1; then
   for ROLE in $(aws iam list-entities-for-policy --policy-arn "${POLICY_ARN}" \
@@ -58,34 +86,13 @@ if aws iam get-policy --policy-arn "${POLICY_ARN}" >/dev/null 2>&1; then
   aws iam delete-policy --policy-arn "${POLICY_ARN}"
 fi
 
-# --- Backup role + its associations (only if nothing else depends on it) ---
-ROLE_ARN=$(aws iam get-role --role-name "${S3_BACKUP_ROLE_NAME}" \
-  --query Role.Arn --output text 2>/dev/null || true)
-if [[ -n "${ROLE_ARN}" && "${ROLE_ARN}" != "None" ]]; then
-  REMAINING=$(aws iam list-attached-role-policies --role-name "${S3_BACKUP_ROLE_NAME}" \
-    --query 'length(AttachedPolicies)' --output text)
-  if [[ "${REMAINING}" -gt 0 ]]; then
-    log "Role ${S3_BACKUP_ROLE_NAME} still has ${REMAINING} other policy(ies); keeping it and its associations."
-  else
-    for ASSOC in $(aws eks list-pod-identity-associations --cluster-name "${CLUSTER_NAME}" \
-        --region "${AWS_REGION}" --namespace "${S3_BACKUP_SA_NAMESPACE}" \
-        --query "associations[].associationId" --output text 2>/dev/null || true); do
-      ASSOC_ROLE_ARN=$(aws eks describe-pod-identity-association --cluster-name "${CLUSTER_NAME}" \
-        --region "${AWS_REGION}" --association-id "${ASSOC}" \
-        --query association.roleArn --output text)
-      if [[ "${ASSOC_ROLE_ARN}" == "${ROLE_ARN}" ]]; then
-        log "Deleting pod identity association ${ASSOC}..."
-        aws eks delete-pod-identity-association --cluster-name "${CLUSTER_NAME}" \
-          --region "${AWS_REGION}" --association-id "${ASSOC}" >/dev/null
-      fi
-    done
-    log "Deleting IAM role ${S3_BACKUP_ROLE_NAME}..."
-    aws iam delete-role --role-name "${S3_BACKUP_ROLE_NAME}"
-  fi
-fi
+# --- IAM roles (only when nothing else is attached) ---
+NS="${S3_BACKUP_SA_NAMESPACE}"
+cleanup_role "${S3_BACKUP_ROLE_NAME}"
+cleanup_role "${S3_ARTIFACTS_ROLE_NAME:-CBCI-S3Artifacts-Role-${CLUSTER_NAME}}"
 
 # --- Bucket ---
-if aws s3api head-bucket --bucket "${S3_BACKUP_BUCKET}" 2>/dev/null; then
+if aws s3api head-bucket --bucket "${S3_BACKUP_BUCKET}" >/dev/null 2>&1; then
   log "Emptying and deleting bucket ${S3_BACKUP_BUCKET}..."
   aws s3 rm "s3://${S3_BACKUP_BUCKET}" --recursive >/dev/null
   aws s3api delete-bucket --bucket "${S3_BACKUP_BUCKET}" --region "${AWS_REGION}"
