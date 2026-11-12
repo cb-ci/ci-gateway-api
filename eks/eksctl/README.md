@@ -18,20 +18,15 @@ until it exists. Create it from the template before running anything else:
 cp .env-template .env
 ```
 
-Then edit `.env` and replace every `<USER_ID>` placeholder (in `TAG_CB_USER`
+Then edit `.env` and replace every `<...>` placeholder: `<USER_ID>` (in `TAG_CB_USER`
 and `CJOC_HOST_NAME`) with your own identifier — it's used to tag every AWS
 resource, name the cluster (`CLUSTER_NAME=${TAG_CB_USER}`), and build the
-CJOC hostname. Review the rest of the file too (region, chart versions,
+CJOC hostname. Also set the `CASC_*` and `CJOC_ADMIN_*` placeholders (or set
+`CASC_ENABLED=false`). Review the rest of the file too (region, chart versions,
 storage class) and adjust anything that doesn't match your account.
 
-`.env` is tracked in git in this copy of the repo, so double-check you're
-not committing personal values before pushing changes to it.
-
-Finally, source it in every new shell before running any numbered script:
-
-```bash
-source .env
-```
+`.env` is git-ignored (`eks/.gitignore`) because it holds secrets (SCM token,
+operations center admin password, GitHub App key). Keep it that way.
 
 See [`.env-template`](.env-template) for the full list of variables.
 
@@ -102,7 +97,7 @@ The following scripts are **operational** — run them any time after the initia
 
 [`09-deleteAll.sh`](09-deleteAll.sh) **orchestrates the whole teardown**: it calls the individual delete scripts in reverse order of creation, deletes the EKS cluster, and finishes with a read-only orphan scan. You normally don't run the other delete scripts by hand.
 
-**Prerequisites:** `aws`, `eksctl`, `kubectl`, `helm`, `jq` and `envsubst` on `PATH`; a valid AWS session (`00-login.sh`); and `kubectl` access to the cluster (`KUBECONFIG` from `.env`). Without `kubectl` access the Kubernetes-side steps are skipped, which can orphan the ALB and ENIs, so the plan warns you.
+**Prerequisites:** `aws`, `eksctl`, `kubectl`, `helm`, `jq` and `envsubst` on `PATH`; a valid AWS session (e.g. `aws sso login`); and `kubectl` access to the cluster (`KUBECONFIG` from `.env`). Without `kubectl` access the Kubernetes-side steps are skipped, which can orphan the ALB and ENIs, so the plan warns you.
 
 ```
 09-deleteAll.sh   (each step runs only if its resources are detected)
@@ -260,7 +255,7 @@ agent pods will stay `Pending` indefinitely.
 | 02 | [`02-create-efs-filesystem.sh`](02-create-efs-filesystem.sh) | Creates an EFS file system + mount target + security group for shared storage, verifies the `aws-efs-csi-driver` IAM role, deploys a StorageClass, and runs an end-to-end test PVC/Pod. |
 | 02 | [`02-delete-efs-filesystem.sh`](02-delete-efs-filesystem.sh) | Removes everything the EFS create script made: test namespace, StorageClass, fallback IAM role, mount targets, file system, and security group. Has no flags and no confirmation prompt. |
 | 03 | [`03-installAwsLbController.sh`](03-installAwsLbController.sh) | Installs the AWS Load Balancer Controller via Helm using the IRSA ServiceAccount eksctl already created, applies its CRDs, and verifies public subnets carry the `kubernetes.io/role/elb=1` tag the controller needs to place an ALB. |
-| 03 | [`03-installClusterAutoscaler.sh`](03-installClusterAutoscaler.sh) | Installs Kubernetes Cluster Autoscaler via Helm using the IRSA ServiceAccount eksctl created (`wellKnownPolicies.autoScaler`), matches the image tag to the cluster's live Kubernetes minor version, and verifies both node groups' ASGs are tagged for auto-discovery (automatic since `minSize != maxSize` on `controllers`/`agents`). Also grants supplemental read-only RBAC on the `resource.k8s.io` API group (Dynamic Resource Allocation objects), which newer autoscaler builds watch unconditionally but the Helm chart's bundled ClusterRole doesn't grant. Independent of the ALB/Envoy chain — run any time after [`01-createCluster.sh`](01-createCluster.sh). |
+| 03 | [`03-installClusterAutoscaler.sh`](03-installClusterAutoscaler.sh) | Installs Kubernetes Cluster Autoscaler via Helm using the IRSA ServiceAccount eksctl created (`wellKnownPolicies.autoScaler`), matches the image tag to the cluster's live Kubernetes minor version, and verifies the node groups' ASGs are tagged for auto-discovery (automatic since `minSize != maxSize` on `controllers`, `agents` and `system`). Also grants supplemental read-only RBAC on the `resource.k8s.io` API group (Dynamic Resource Allocation objects), which newer autoscaler builds watch unconditionally but the Helm chart's bundled ClusterRole doesn't grant. Independent of the ALB/Envoy chain — run any time after [`01-createCluster.sh`](01-createCluster.sh). |
 | 04 | [`04-installEnvoy.sh`](04-installEnvoy.sh) | Installs Envoy Gateway, requests/validates the ACM certificate for `CJOC_HOST_NAME` (with automated Route53 DNS validation), and creates the Gateway/GatewayClass/HTTPRoute plumbing plus the `cjoc-alb` Ingress that provisions the **shared internet-facing ALB**. |
 | 04 | [`04-deleteEnvoy.sh`](04-deleteEnvoy.sh) | Tears down the Ingress (deprovisioning the ALB), Gateway API resources, and the Envoy Gateway Helm release. Leaves the CloudBees namespace, CRDs, and ACM certificate in place unless `--delete-crds` / `--delete-cert` are passed. `--yes` skips the prompt. |
 | 05 | [`05-installCloudBees.sh`](05-installCloudBees.sh) | Installs CloudBees CI (Operations Center / CJOC) via the `cloudbees/cloudbees-core` Helm chart, wired to the Gateway from step 04, and waits for the Gateway to get an address. Optional parts are switched on in `.env` (see [Optional install flags](#optional-install-flags-05-installcloudbeessh)). |
@@ -285,7 +280,7 @@ agent pods will stay `Pending` indefinitely.
 The base install always runs. Everything below is off by default and switched on in `.env`; `HELM_DEBUG=true` adds `helm --debug`. Flags are read at install time, so re-run the script (a `helm upgrade`) after changing them.
 
 | Variable | Default | Effect |
-|---|---|---|
+| --- | --- | --- |
 | `CASC_ENABLED` | `false` | Deploys the CasC bundle retriever for the operations center from `CASC_SCM_REPO`/`CASC_SCM_BRANCH`, path `CASC_SCM_BUNDLE_PATH_CJOC`. Requires `CASC_SCM_USERNAME`, `CASC_SCM_PASSWORD` and `CJOC_ADMIN_PASSWORD`; the script aborts if they are missing. Bundles live in [`../../casc`](../../casc). |
 | `S3_LOGS_ENABLED` | `false` | Enables Pluggable Storage with build logs on S3 (`AMAZON_S3`). Bucket, prefix and ServiceAccount come from `S3_LOGS_*`; create them first with `07-createS3PlugableStorage-LogsBucket.sh`. |
 | `CHANNEL_PINGER_ENABLED` | `false` | Sets `-Dhudson.slaves.ChannelPinger.pingIntervalSeconds` on the operations center and managed controllers. `CHANNEL_PINGER_INTERVAL_SECONDS` defaults to `1200`. |
@@ -298,7 +293,7 @@ The base install always runs. Everything below is off by default and switched on
 Three independent buckets, each with a create and a delete script. All grant access through **EKS Pod Identity** (no static keys, no node-role changes) and require `aws` CLI v2 and the Pod Identity Agent add-on from `01-createCluster.sh`.
 
 | Purpose | Create / delete | Consumer | Key variables (see [`.env-template`](.env-template)) |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | Backups | `07-createS3BackupBucket.sh` / `07-deleteS3BackupBucket.sh` | Managed controllers | `S3_BACKUP_BUCKET`, `S3_BACKUP_EXPIRE_DAYS`, `S3_BACKUP_SA_NAMESPACE`, `S3_BACKUP_POD_SELECTOR`, `S3_BACKUP_SA_NAMES` |
 | Artifacts | `07-createS3ArtifactStorage.sh` / `07-deleteS3ArtifactStorage.sh` | *Artifact Manager on S3* plugin on controllers | `S3_ARTIFACTS_BUCKET`, `S3_ARTIFACTS_PREFIX`, `S3_ARTIFACTS_EXPIRE_DAYS`, `S3_ARTIFACTS_SA_NAMES`, `S3_ARTIFACTS_POLICY_SCOPE` |
 | Build logs | `07-createS3PlugableStorage-LogsBucket.sh` / `07-deleteS3PlugableStorage-LogsBucket.sh` | Pluggable Storage service (`S3_LOGS_ENABLED=true`) | `S3_LOGS_BUCKET`, `S3_LOGS_PREFIX`, `S3_LOGS_EXPIRE_DAYS`, `S3_LOGS_SA_NAME` |
@@ -317,7 +312,7 @@ Behavior worth knowing:
 Set `MCP_ENABLED=true` in `.env` before running `05-installCloudBees.sh` to deploy the CloudBees CI MCP Router with OAuth through the `cloudbees-core` chart (`McpRouter.enabled`, `OperationsCenter.OAuthServer.Enabled`, upstream mode `AUTO`). Background, auth flow and chart values are in [`01-MCP.md`](../../docs/01-MCP.md).
 
 | Variable | Default | Purpose |
-|---|---|---|
+| --- | --- | --- |
 | `MCP_ENABLED` | `false` | Deploy the router and enable the OAuth authorization server. |
 | `MCP_UPSTREAM_MODE` | `AUTO` | `AUTO` accepts OAuth bearer tokens and Basic/API-token headers. `OAUTH_ONLY` rejects everything but bearer tokens. |
 | `MCP_RATE_LIMIT_ENABLED` | `false` | Per-caller rate limiting on `/mcp`. Optional `MCP_RATE_LIMIT_PERMITS` and `MCP_RATE_LIMIT_WINDOW`. |
@@ -325,7 +320,7 @@ Set `MCP_ENABLED=true` in `.env` before running `05-installCloudBees.sh` to depl
 
 The router is served through the Gateway at `https://<CJOC_HOST_NAME>/mcp-router/mcp`.
 
-**Prerequisite:** the MCP Server plugin must be on the controllers, and the OAuth Authorization Server plugin on the operations center and the OAuth Resource Server plugin on the controllers (`OAUTH_ONLY` needs the last one everywhere). The `casc/` bundles install them: `cloudbees-oauth-server` and `cloudbees-oauth-resource` in `casc/cjoc/plugins.yaml`, `mcp-server` and `cloudbees-oauth-resource` in `casc/controller-base/plugins.yaml`. The retriever reads the bundles from `CASC_SCM_REPO`/`CASC_SCM_BRANCH`, so commit and push them first.
+**Prerequisite:** the MCP Server plugin must be on the controllers, and the OAuth Authorization Server plugin on the operations center and the OAuth Resource Server plugin on the controllers (`OAUTH_ONLY` needs the last one everywhere). The `casc/` bundles install them: `mcp-server`, `cloudbees-oauth-server` and `cloudbees-oauth-resource` in `casc/cjoc/mcp/mcp-plugins.yaml`, `mcp-server` and `cloudbees-oauth-resource` in `casc/controller-base/mcp/mcp-plugins.yaml`. The retriever reads the bundles from `CASC_SCM_REPO`/`CASC_SCM_BRANCH`, so commit and push them first.
 
 ## Architecture
 
@@ -333,9 +328,9 @@ The router is served through the Gateway at `https://<CJOC_HOST_NAME>/mcp-router
 flowchart TB
     User(("Internet users"))
 
-    subgraph DNS["Route53 — acaternberg.aws.ps.beescloud.com"]
+    subgraph DNS["Route53 — USER_ID.aws.ps.beescloud.com"]
         direction LR
-        R53_CJOC["A (Record)\ncjoc.___\nmanaged by external-dns"]
+        R53_CJOC["A (Record)\nci.___\nmanaged by external-dns"]
         R53_EC2["A (Record)\nec2-controller.___\nmanaged by the EC2 controller add-on"]
     end
 
@@ -352,7 +347,7 @@ flowchart TB
         end
 
         subgraph Private["Private subnets"]
-            subgraph EKS["EKS cluster: acaternberg"]
+            subgraph EKS["EKS cluster: CLUSTER_NAME"]
                 LBC["aws-load-balancer-controller"]
                 CA["cluster-autoscaler"]
                 EDNS["external-dns"]
@@ -376,7 +371,7 @@ flowchart TB
     R53_CJOC --> ALB
     R53_EC2 --> ALB
 
-    ALB -->|"host: cjoc.___"| EnvoySvc --> EnvoyGW --> CJOC
+    ALB -->|"host: ci.___"| EnvoySvc --> EnvoyGW --> CJOC
     ALB -->|"host: ec2-controller.___"| EC2
     ALB -. SNI certificates .-> ACM
 

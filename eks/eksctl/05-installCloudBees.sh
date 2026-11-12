@@ -15,7 +15,7 @@
 #   MCP_ENABLED=true               CloudBees CI MCP Router + OAuth authorization server
 #                                  (McpRouter.enabled, OperationsCenter.OAuthServer.Enabled,
 #                                  upstream mode AUTO). Needs the MCP Server plugin and the
-#                                  OAuth Authorization/Resource Server plugins; see docs/MCP.md.
+#                                  OAuth Authorization/Resource Server plugins; see docs/01-MCP.md.
 #                                  Optional: MCP_RATE_LIMIT_ENABLED (+ _PERMITS, _WINDOW),
 #                                  MCP_CONTROLLERS_CACHE_TTL
 #   HELM_DEBUG=true                helm --debug
@@ -202,7 +202,7 @@ if [[ -n "$GATEWAY_IP" ]]; then
     log "Post-install: Update your DNS A record for ${CJOC_HOST_NAME} to ${GATEWAY_IP}"
     if [[ "${MCP_ENABLED:-false}" == "true" ]]; then
       log "MCP Router endpoint: https://${CJOC_HOST_NAME}/mcp-router/mcp"
-      log "MCP requires the MCP Server and OAuth plugins on CJOC/controllers (see docs/MCP.md)."
+      log "MCP requires the MCP Server and OAuth plugins on CJOC/controllers (see docs/01-MCP.md)."
     fi
 else
     echo ""
