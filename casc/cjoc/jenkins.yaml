@@ -41,27 +41,27 @@ jenkins:
         properties:
         - mailer:
             emailAddress: "${ADMIN_EMAIL}"
-  views:
-  - masters:
-      columns:
-      - "status"
-      - "weather"
-      - "jobName"
-      - "manageMaster"
-      - "masterPodStatusViewColumn"
-      - "totalJobsViewColumn"
-      - "queueSizeViewColumn"
-      - "jenkinsVersionViewColumn"
-      - "cascViewColumn"
-      - "listSelectionColumn"
-      - "masterConfigurationStaleViewColumn"
-      jobFilters:
-      - "connectedMasterViewFilter"
-      name: "Controllers"
-      recurse: true
-  - all:
-      name: "all"
-  viewsTabBar: "standard"
+  # views:
+  # - masters:
+  #     columns:
+  #     - "status"
+  #     - "weather"
+  #     - "jobName"
+  #     - "manageMaster"
+  #     - "masterPodStatusViewColumn"
+  #     - "totalJobsViewColumn"
+  #     - "queueSizeViewColumn"
+  #     - "jenkinsVersionViewColumn"
+  #     - "cascViewColumn"
+  #     - "listSelectionColumn"
+  #     - "masterConfigurationStaleViewColumn"
+  #     jobFilters:
+  #     - "connectedMasterViewFilter"
+  #     name: "Controllers"
+  #     recurse: true
+  # - all:
+  #     name: "all"
+  # viewsTabBar: "standard"
 cloudBeesCasCServer:
   disableRemoteValidation: false
   visibility: true
