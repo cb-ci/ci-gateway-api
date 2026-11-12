@@ -14,7 +14,6 @@ roles:
   - com.cloudbees.opscenter.server.model.SharedSlave.Configure
   - com.cloudbees.opscenter.server.model.ClientMaster.Lifecycle
   - com.cloudbees.jenkins.plugins.casc.permissions.CascPermission.Read
-  - com.cloudbees.plugins.updatecenter.UpdateCenter.Upload
   - com.cloudbees.opscenter.server.model.SharedCloud.Configure
   - hudson.model.Hudson.ConfigureUpdateCenter
   - nectar.plugins.rbac.groups.Group.Manage
@@ -23,14 +22,12 @@ roles:
   - hudson.model.Item.Cancel
   - com.cloudbees.opscenter.server.model.SharedSlave.Disconnect
   - com.cloudbees.plugins.credentials.CredentialsProvider.View
-  - com.cloudbees.jenkins.plugin.metrics.views.Alerter.View
   - hudson.model.Computer.Delete
   - hudson.model.Item.Build
   - hudson.model.Item.Move
   - com.cloudbees.jenkins.plugins.casc.permissions.CascPermission.Administer
   - com.cloudbees.plugins.credentials.CredentialsProvider.Update
   - hudson.model.Item.Create
-  - com.cloudbees.jenkins.plugin.metrics.views.Alerter.Mute
   - com.cloudbees.plugins.credentials.CredentialsProvider.Delete
   - com.cloudbees.opscenter.server.model.SharedCloud.ForceRelease
   - jenkins.metrics.api.Metrics.ThreadDump
@@ -59,11 +56,9 @@ roles:
   - hudson.scm.SCM.Tag
   - hudson.model.Item.Discover
   - hudson.model.Hudson.Read
-  - com.cloudbees.plugins.updatecenter.UpdateCenter.Configure
   - nectar.plugins.rbac.roles.Role.View
   - hudson.model.Item.Workspace
   - hudson.model.Computer.Provision
-  - com.cloudbees.plugins.updatecenter.UpdateCenter.Store
   - nectar.plugins.rbac.groups.Group.Configure
   - com.cloudbees.jenkins.plugins.casc.permissions.CascPermission.ReadCheckout
   - nectar.plugins.rbac.groups.Group.Delete
@@ -73,7 +68,6 @@ roles:
   - hudson.model.Computer.Disconnect
   - hudson.model.Item.Request
   - nectar.plugins.rbac.groups.Group.View
-  - com.cloudbees.plugins.updatecenter.UpdateCenter.Promote
   name: administer
 - name: anonymous
 - filterable: true
