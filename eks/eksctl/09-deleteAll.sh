@@ -5,16 +5,27 @@
 # EKS cluster itself, then a read-only scan for orphaned resources.
 #
 # ORDER (each step is auto-detected and skipped when nothing is found)
+#   0. Scale node pools up if the AWS Load Balancer Controller cannot run (it must
+#      be running to remove the ALB; a stopped controller leaves the ALB and its
+#      security group behind and hangs the VPC deletion)
 #   1. 07-deleteEC2WithController.sh --delete-cert   EC2 add-on, ALB listener rule
 #   2. 05-deleteCloudBees.sh --delete-data --delete-namespace
 #   3. 07-deleteS3PlugableStorage-LogsBucket.sh      DESTRUCTIVE (bucket + data)
 #      07-deleteS3ArtifactStorage.sh                 DESTRUCTIVE (bucket + data)
 #      07-deleteS3BackupBucket.sh                    DESTRUCTIVE (bucket + data)
-#   4. 04-deleteEnvoy.sh --delete-crds --delete-cert Ingress -> ALB, Envoy, ACM cert
+#   4. 04-deleteEnvoy.sh --delete-crds --delete-cert Ingress -> ALB, Envoy, ACM cert + validation CNAME
 #   5. 06-deleteExternalDNS.sh                       Route53 records, IAM role/policy
 #   6. 02-delete-efs-filesystem.sh                   EFS, mount targets, SG
-#   7. eksctl delete cluster                         cluster, VPC, node groups, eksctl IAM
-#   8. Orphan report (read-only): anything still tagged for / named after the cluster
+#   7. Safety-net cleanups, re-checked when they run (work without a cluster):
+#      - unused ACM certificates for the CJOC/EC2 host with tag cb-user=TAG_CB_USER
+#      - ACM validation CNAMEs (_<hex>.<host>) once no certificate exists
+#      - Route53 A alias (ALB gone) and external-dns TXT records owned by this cluster
+#      - LB controller security groups (they block VPC deletion)
+#   9. eksctl delete cluster                         cluster, VPC, node groups, eksctl IAM;
+#      a background janitor removes LB security groups while it waits, a failed or
+#      raced run is retried (up to 3 times, DELETE_FAILED stacks via CloudFormation)
+#  10. Orphan report (read-only): anything still tagged for / named after the cluster;
+#      stale tag-index entries (terminated instances, deleted volumes/NAT) are ignored
 #
 # Counterpart of 01-createAll.sh. (01-deleteCluster.sh only runs `eksctl delete cluster`.)
 #
@@ -22,9 +33,11 @@
 # have no delete script; they live inside the cluster and go with it.
 #
 # SAFETY
-#   Prints the plan first and requires typing the cluster name. A step that
-#   fails aborts the run; every child script is idempotent, so fix the cause and
-#   re-run. Nothing is deleted before the plan is confirmed.
+#   Prints the plan first and requires typing the cluster name (once; --yes skips
+#   it). No other prompts. A step that fails aborts the run; every child script is
+#   idempotent, so fix the cause and re-run. Nothing is deleted before the plan
+#   is confirmed. Cleanup steps only touch resources of THIS cluster (its VPC,
+#   its tags/names).
 #
 # Usage:
 #   ./09-deleteAll.sh                # plan, typed confirmation, delete
@@ -35,6 +48,7 @@
 set -euo pipefail
 
 source ./.env
+source "$(dirname "${BASH_SOURCE[0]}")/_cleanup-lib.sh"
 
 # Never open the AWS CLI pager (it blocks child scripts until "q" is pressed).
 export AWS_PAGER=""
@@ -52,7 +66,7 @@ while [[ $# -gt 0 ]]; do
     --yes|-y)       ASSUME_YES=true ;;
     --dry-run)      DRY_RUN=true ;;
     --report-only)  REPORT_ONLY=true ;;
-    -h|--help)      sed -n '2,34p' "$0"; exit 0 ;;
+    -h|--help)      sed -n '2,47p' "$0"; exit 0 ;;
     *)              error "unknown flag '$1' (try --help)" ;;
   esac
   shift
@@ -68,7 +82,7 @@ AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text) \
 
 # Names must match the create scripts' defaults.
 EFS_NAME="${EFS_NAME:-${CLUSTER_NAME}-efs}"
-EC2_HOST_NAME="${EC2_CONTROLLER_HOST_NAME:-ec2-controller.acaternberg.aws.ps.beescloud.com}"
+EC2_HOST_NAME="${EC2_CONTROLLER_HOST_NAME:-ec2-controller.${CJOC_HOST_NAME#*.}}"
 EC2_INSTANCE_NAME="${EC2_CONTROLLER_INSTANCE_NAME:-${CLUSTER_NAME}-ec2-controller}"
 S3_BACKUP_BUCKET="${S3_BACKUP_BUCKET:-${CLUSTER_NAME}-cbci-backup-${AWS_ACCOUNT_ID}}"
 S3_ARTIFACTS_BUCKET="${S3_ARTIFACTS_BUCKET:-${CLUSTER_NAME}-cbci-artifacts-${AWS_ACCOUNT_ID}}"
@@ -130,11 +144,151 @@ has_efs() {
         --output text 2>/dev/null || true)
   [[ -n "$id" && "$id" != "None" ]]
 }
-has_cluster() { [[ "$CLUSTER_EXISTS" == true ]]; }
+eks_cluster_exists() { aws eks describe-cluster --name "$CLUSTER_NAME" --region "$AWS_REGION" &>/dev/null; }
+# "<stack> <status>" lines for this cluster's eksctl stacks that still exist.
+remaining_stacks() {
+  aws cloudformation list-stacks --region "$AWS_REGION" \
+    --stack-status-filter CREATE_COMPLETE UPDATE_COMPLETE UPDATE_ROLLBACK_COMPLETE \
+      ROLLBACK_COMPLETE CREATE_FAILED DELETE_FAILED DELETE_IN_PROGRESS \
+    --query "StackSummaries[?starts_with(StackName,'eksctl-${CLUSTER_NAME}-')].[StackName,StackStatus]" \
+    --output text 2>/dev/null || true
+}
+has_cluster() { [[ "$CLUSTER_EXISTS" == true ]] || [[ -n "$(remaining_stacks)" ]]; }
+has_lb_sgs() { [[ -n "$(list_lb_security_groups)" ]]; }
+has_leftover_acm_certs() {
+  local h
+  for h in "$CJOC_HOST_NAME" "$EC2_HOST_NAME"; do
+    [[ -n "$(list_leftover_acm_certs "$h")" ]] && return 0
+  done
+  return 1
+}
+has_leftover_dns() {
+  local h
+  for h in "$CJOC_HOST_NAME" "$EC2_HOST_NAME"; do
+    [[ -n "$(list_leftover_dns_records "$h")" ]] && return 0
+  done
+  return 1
+}
+has_acm_cnames() {
+  local h
+  for h in "$CJOC_HOST_NAME" "$EC2_HOST_NAME"; do
+    [[ -n "$(list_acm_validation_cnames "$h")" ]] && return 0
+  done
+  return 1
+}
+
+# --- Automatic recovery helpers ----------------------------------------------
+lbc_ready() {
+  local r
+  r=$(kubectl get deployment aws-load-balancer-controller -n kube-system \
+        -o jsonpath='{.status.readyReplicas}' --request-timeout=15s 2>/dev/null || true)
+  [[ "${r:-0}" -gt 0 ]]
+}
+# True when Ingresses exist but the controller that removes their ALBs cannot run.
+needs_capacity() {
+  [[ "$K8S_OK" == true ]] || return 1
+  kubectl get deployment aws-load-balancer-controller -n kube-system &>/dev/null || return 1
+  kubectl get ingress -A --no-headers --request-timeout=15s 2>/dev/null | grep -q . || return 1
+  ! lbc_ready
+}
+ensure_cluster_capacity() {
+  log "The AWS Load Balancer Controller is not running (node pools scaled down?). Scaling up so it can remove the ALB..."
+  bash ./01-scaleUpNodePools.sh --yes
+  log "Waiting for the AWS Load Balancer Controller..."
+  kubectl rollout status deployment/aws-load-balancer-controller -n kube-system --timeout=600s
+}
+cleanup_acm_certs() {
+  local h
+  for h in "$CJOC_HOST_NAME" "$EC2_HOST_NAME"; do delete_leftover_acm_certs "$h"; done
+}
+cleanup_leftover_dns() {
+  local h
+  for h in "$CJOC_HOST_NAME" "$EC2_HOST_NAME"; do delete_leftover_dns_records "$h"; done
+}
+cleanup_acm_cnames() {
+  local h
+  for h in "$CJOC_HOST_NAME" "$EC2_HOST_NAME"; do delete_acm_validation_cnames "$h"; done
+}
+cleanup_lb_security_groups() {
+  wait_delete_lb_security_groups 120 \
+    || warn "LB controller security group(s) still in use; the janitor keeps trying while the cluster is deleted."
+}
+
+# Deletes leftover LB security groups in the background while eksctl waits for the VPC stack.
+JANITOR_PID=""
+start_sg_janitor() {
+  ( while true; do sleep 30; delete_lb_security_groups || true; done ) &
+  JANITOR_PID=$!
+}
+stop_sg_janitor() {
+  [[ -n "$JANITOR_PID" ]] && kill "$JANITOR_PID" 2>/dev/null || true
+  JANITOR_PID=""
+}
+trap stop_sg_janitor EXIT
+
+delete_cluster() {
+  local attempt name status
+  envsubst < eksctl-config.yaml.tpl > eksctl-config.yaml
+  start_sg_janitor
+  for attempt in 1 2 3; do
+    log "Deleting EKS cluster ${CLUSTER_NAME} in region ${AWS_REGION} (attempt ${attempt}/3)..."
+    eksctl delete cluster -f eksctl-config.yaml --wait --force --disable-nodegroup-eviction || true
+    delete_lb_security_groups || true
+    if ! eks_cluster_exists && [[ -z "$(remaining_stacks)" ]]; then
+      stop_sg_janitor
+      return 0
+    fi
+    warn "Cluster or stacks still present after attempt ${attempt}:"
+    remaining_stacks
+    # eksctl can fail on a stack CloudFormation already removed ("does not exist")
+    # or leave one in DELETE_FAILED; delete those directly. The cluster stack goes last.
+    if (( attempt >= 2 )) || grep -q DELETE_FAILED <<< "$(remaining_stacks)"; then
+      while IFS=$'\t' read -r name status; do
+        [[ -n "${name:-}" && "$name" != "eksctl-${CLUSTER_NAME}-cluster" && "$status" != DELETE_IN_PROGRESS ]] || continue
+        log "Deleting stack ${name} (${status}) in CloudFormation..."
+        aws cloudformation delete-stack --region "$AWS_REGION" --stack-name "$name" || true
+        aws cloudformation wait stack-delete-complete --region "$AWS_REGION" --stack-name "$name" || true
+      done <<< "$(remaining_stacks)"
+      if ! eks_cluster_exists && grep -q "eksctl-${CLUSTER_NAME}-cluster" <<< "$(remaining_stacks)"; then
+        log "Deleting stack eksctl-${CLUSTER_NAME}-cluster in CloudFormation..."
+        aws cloudformation delete-stack --region "$AWS_REGION" --stack-name "eksctl-${CLUSTER_NAME}-cluster" || true
+        aws cloudformation wait stack-delete-complete --region "$AWS_REGION" --stack-name "eksctl-${CLUSTER_NAME}-cluster" || true
+      fi
+    fi
+    if ! eks_cluster_exists && [[ -z "$(remaining_stacks)" ]]; then
+      stop_sg_janitor
+      return 0
+    fi
+  done
+  stop_sg_janitor
+  error "Cluster ${CLUSTER_NAME} could not be fully deleted after 3 attempts. Run ./09-deleteAll.sh --report-only and check the CloudFormation stack events."
+}
 
 # =============================================================================
 # ORPHAN REPORT (read-only; never deletes)
 # =============================================================================
+# The tagging API keeps listing terminated instances, deleted NAT gateways and
+# volumes for a while. Only report resources that really exist.
+arn_is_live() {
+  local arn="$1" id="${1##*/}" st
+  case "$arn" in
+    *:cloudformation:*) return 1 ;;   # reported separately from list-stacks
+    *:instance/*)
+      st=$(aws ec2 describe-instances --region "$AWS_REGION" --instance-ids "$id" \
+            --query 'Reservations[0].Instances[0].State.Name' --output text 2>/dev/null || true)
+      [[ -n "$st" && "$st" != None && "$st" != terminated ]] ;;
+    *:natgateway/*)
+      st=$(aws ec2 describe-nat-gateways --region "$AWS_REGION" --nat-gateway-ids "$id" \
+            --query 'NatGateways[0].State' --output text 2>/dev/null || true)
+      [[ -n "$st" && "$st" != None && "$st" != deleted && "$st" != deleting ]] ;;
+    *:volume/*)         aws ec2 describe-volumes --region "$AWS_REGION" --volume-ids "$id" &>/dev/null ;;
+    *:security-group/*) aws ec2 describe-security-groups --region "$AWS_REGION" --group-ids "$id" &>/dev/null ;;
+    *:vpc/*)            aws ec2 describe-vpcs --region "$AWS_REGION" --vpc-ids "$id" &>/dev/null ;;
+    *:network-interface/*) aws ec2 describe-network-interfaces --region "$AWS_REGION" --network-interface-ids "$id" &>/dev/null ;;
+    *) return 0 ;;
+  esac
+}
+
 orphan_report() {
   local found=0 out
   report() { warn "STILL EXISTS: $*"; found=$((found + 1)); }
@@ -167,13 +321,20 @@ orphan_report() {
     --tag-filters "Key=alpha.eksctl.io/cluster-name,Values=${CLUSTER_NAME}" \
     --query 'ResourceTagMappingList[].ResourceARN' --output text 2>/dev/null | tr '\t' '\n' || true)
   while read -r arn; do
-    [[ -n "$arn" && "$arn" != "None" ]] && report "tagged resource ${arn}"
+    [[ -n "$arn" && "$arn" != "None" ]] && arn_is_live "$arn" && report "tagged resource ${arn}"
   done < <(printf '%s\n' "$arns" | sort -u)
 
   # Named resources created by the add-on scripts.
   for b in "$S3_BACKUP_BUCKET" "$S3_ARTIFACTS_BUCKET" "$S3_LOGS_BUCKET"; do
     has_s3 "$b" && report "S3 bucket ${b}"
   done
+  # Security groups the LB controller creates outside the eksctl stacks; they block VPC deletion.
+  out=$(aws ec2 describe-security-groups --region "$AWS_REGION" \
+    --filters "Name=group-name,Values=k8s-*-${CLUSTER_NAME}-*" \
+    --query 'SecurityGroups[].[GroupId,GroupName]' --output text 2>/dev/null || true)
+  while IFS=$'\t' read -r sg_id sg_name; do
+    [[ -n "${sg_id:-}" ]] && report "security group ${sg_id} (${sg_name}); re-run ./09-deleteAll.sh to remove it, it blocks VPC deletion"
+  done <<< "$out"
   has_efs && report "EFS file system ${EFS_NAME}"
   has_ec2 && report "EC2 controller add-on (${EC2_INSTANCE_NAME})"
 
@@ -231,9 +392,11 @@ fi
 # =============================================================================
 # PLAN
 # =============================================================================
-STEP_LABEL=(); STEP_FN=(); STEP_CMD=(); STEP_RUN=()
-add_step() { STEP_LABEL+=("$1"); STEP_FN+=("$2"); STEP_CMD+=("$3"); }
+STEP_LABEL=(); STEP_FN=(); STEP_CMD=(); STEP_LATE=(); STEP_RUN=()
+# 4th argument "late": re-check at run time (earlier steps may create or remove the leftovers).
+add_step() { STEP_LABEL+=("$1"); STEP_FN+=("$2"); STEP_CMD+=("$3"); STEP_LATE+=("${4:-0}"); }
 
+add_step "Scale node pools up (LB controller must run to remove the ALB)" needs_capacity fn:ensure_cluster_capacity
 add_step "EC2 Client Controller add-on (+ ACM cert)"      has_ec2           "./07-deleteEC2WithController.sh --delete-cert --yes"
 add_step "CloudBees CI, PVCs/JENKINS_HOME and namespaces" has_cloudbees     "./05-deleteCloudBees.sh --delete-data --delete-namespace --yes"
 add_step "S3 build-logs bucket (DESTRUCTIVE)"             has_s3_logs       "./07-deleteS3PlugableStorage-LogsBucket.sh --yes"
@@ -242,7 +405,11 @@ add_step "S3 backup bucket (DESTRUCTIVE)"                 has_s3_backup     "./0
 add_step "Envoy Gateway, ALB, CRDs and ACM cert"          has_envoy         "./04-deleteEnvoy.sh --delete-crds --delete-cert --yes"
 add_step "external-dns, Route53 records, IAM role/policy" has_external_dns  "./06-deleteExternalDNS.sh --yes"
 add_step "EFS file system, mount targets, SG"             has_efs           "./02-delete-efs-filesystem.sh"
-add_step "EKS cluster ${CLUSTER_NAME} (eksctl)"           has_cluster       "eksctl"
+add_step "ACM certificates (leftovers, unused, tag-checked)" has_leftover_acm_certs fn:cleanup_acm_certs     1
+add_step "ACM validation CNAMEs in Route53 (leftovers)"   has_acm_cnames     fn:cleanup_acm_cnames           1
+add_step "Route53 A/TXT records of this cluster (leftovers)" has_leftover_dns fn:cleanup_leftover_dns         1
+add_step "LB controller security groups (leftovers)"      has_lb_sgs        fn:cleanup_lb_security_groups   1
+add_step "EKS cluster ${CLUSTER_NAME} (eksctl, with retry)" has_cluster     fn:delete_cluster
 
 echo
 warn "TEARDOWN PLAN for cluster '${CLUSTER_NAME}' (account ${AWS_ACCOUNT_ID}, ${AWS_REGION})"
@@ -250,7 +417,11 @@ warn "TEARDOWN PLAN for cluster '${CLUSTER_NAME}' (account ${AWS_ACCOUNT_ID}, ${
 [[ "$CLUSTER_EXISTS" == true && "$K8S_OK" != true ]] && warn "Cluster exists but kubectl cannot reach it (KUBECONFIG=${KUBECONFIG:-unset}); Kubernetes-side steps are skipped. Fix access first, or ALBs/ENIs may be orphaned."
 i=0
 for label in "${STEP_LABEL[@]}"; do
-  if "${STEP_FN[$i]}"; then STEP_RUN+=(1); printf '  \033[1;31m[DELETE]\033[0m %s\n' "$label"
+  if [[ "${STEP_LATE[$i]}" == 1 ]]; then
+    STEP_RUN+=(1)
+    if "${STEP_FN[$i]}"; then printf '  \033[1;31m[DELETE]\033[0m %s (leftovers found; re-checked when it runs)\n' "$label"
+    else printf '  [auto]   %s (none now; re-checked when it runs)\n' "$label"; fi
+  elif "${STEP_FN[$i]}"; then STEP_RUN+=(1); printf '  \033[1;31m[DELETE]\033[0m %s\n' "$label"
   else                      STEP_RUN+=(0); printf '  [skip]   %s (nothing found)\n' "$label"; fi
   i=$((i + 1))
 done
@@ -275,14 +446,16 @@ trap 'echo; warn "Teardown stopped at step: ${CURRENT_STEP:-?}. Fix the cause an
 
 i=0
 for label in "${STEP_LABEL[@]}"; do
-  if [[ "${STEP_RUN[$i]}" == 1 ]]; then
+  run="${STEP_RUN[$i]}"
+  if [[ "${STEP_LATE[$i]}" == 1 ]]; then
+    if "${STEP_FN[$i]}"; then run=1; else run=0; fi
+  fi
+  if [[ "$run" == 1 ]]; then
     CURRENT_STEP="$label"
     echo
     log "=== ${label} ==="
-    if [[ "${STEP_CMD[$i]}" == "eksctl" ]]; then
-      envsubst < eksctl-config.yaml.tpl > eksctl-config.yaml
-      log "Deleting EKS cluster ${CLUSTER_NAME} in region ${AWS_REGION}..."
-      eksctl delete cluster -f eksctl-config.yaml --wait --force --disable-nodegroup-eviction
+    if [[ "${STEP_CMD[$i]}" == fn:* ]]; then
+      "${STEP_CMD[$i]#fn:}"
     else
       # shellcheck disable=SC2086
       bash ${STEP_CMD[$i]}

@@ -24,6 +24,12 @@
 #   ./04-deleteEnvoy.sh --delete-crds   # also remove the CRDs (cluster-wide!)
 #   ./04-deleteEnvoy.sh --delete-cert   # also delete the ACM certificate
 #   ./04-deleteEnvoy.sh --yes           # skip the confirmation prompt
+#   ./04-deleteEnvoy.sh --skip-lbc-check  # delete even if the LB controller is not Ready
+#
+# PRE-CHECK: the Ingress is only deleted while the AWS Load Balancer Controller
+# has a ready replica. Otherwise the finalizer never clears, the delete hangs,
+# and the ALB and its k8s-traffic-* security group are left behind (they then
+# block the VPC and `eksctl delete cluster`).
 # -----------------------------------------------------------------------------
 set -euo pipefail
 
@@ -37,19 +43,22 @@ error()   { printf '\033[1;31m[ERROR]\033[0m %s\n' "$*" >&2; exit 1; }
 DELETE_CRDS=false
 DELETE_CERT=false
 ASSUME_YES=false
+SKIP_LBC_CHECK=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --delete-crds) DELETE_CRDS=true ;;
     --delete-cert) DELETE_CERT=true ;;
     --yes|-y)      ASSUME_YES=true ;;
-    -h|--help)     sed -n '2,27p' "$0"; exit 0 ;;
+    --skip-lbc-check) SKIP_LBC_CHECK=true ;;
+    -h|--help)     sed -n '2,33p' "$0"; exit 0 ;;
     *)             error "unknown flag '$1' (try --help)" ;;
   esac
   shift
 done
 
 AWS_REGION=${AWS_DEFAULT_REGION:-us-east-1}
+source "$(dirname "${BASH_SOURCE[0]}")/_cleanup-lib.sh"
 
 # =============================================================================
 # 0. CONFIRM
@@ -75,10 +84,21 @@ fi
 # 1. INGRESS / ALB — must go first, while the controller can still act
 # =============================================================================
 if kubectl get ingress cjoc-alb -n "${ENVOY_GW_NAMESPACE}" &>/dev/null; then
+  if [[ "$SKIP_LBC_CHECK" != true ]]; then
+    LBC_READY=$(kubectl get deployment aws-load-balancer-controller -n kube-system \
+      -o jsonpath='{.status.readyReplicas}' 2>/dev/null || true)
+    if [[ -z "${LBC_READY}" || "${LBC_READY}" == "0" ]]; then
+      error "AWS Load Balancer Controller has no ready replica (kube-system). Deleting the Ingress now would hang on its finalizer and leave the ALB and its security group behind. Fix it first (pods Pending? run ./01-scaleUpNodePools.sh; see: kubectl get pods -n kube-system -l app.kubernetes.io/name=aws-load-balancer-controller), or re-run with --skip-lbc-check."
+    fi
+  fi
   log "Deleting Ingress cjoc-alb (deprovisions the ALB)..."
-  kubectl delete ingress cjoc-alb -n "${ENVOY_GW_NAMESPACE}" --wait=true --timeout=300s \
-    || warn "Ingress deletion timed out — check the ALB was actually removed in the console."
-  success "Ingress deleted."
+  if kubectl delete ingress cjoc-alb -n "${ENVOY_GW_NAMESPACE}" --wait=true --timeout=300s; then
+    success "Ingress deleted."
+  else
+    warn "Ingress deletion timed out. Finalizers: $(kubectl get ingress cjoc-alb -n "${ENVOY_GW_NAMESPACE}" -o jsonpath='{.metadata.finalizers}' 2>/dev/null || echo unknown)"
+    kubectl get pods -n kube-system -l app.kubernetes.io/name=aws-load-balancer-controller 2>/dev/null || true
+    warn "Check that the ALB, its target groups and the k8s-traffic-* security group were removed in AWS before deleting the cluster."
+  fi
 else
   log "No cjoc-alb Ingress found; skipping."
 fi
@@ -164,6 +184,8 @@ if [[ "$DELETE_CERT" == true ]]; then
   else
     log "No certificate found for '${CJOC_HOST_NAME}'."
   fi
+  # ACM does not remove its DNS-validation CNAME with the certificate.
+  delete_acm_validation_cnames "${CJOC_HOST_NAME}"
 else
   log "Leaving the ACM certificate in place (pass --delete-cert to remove it)."
 fi

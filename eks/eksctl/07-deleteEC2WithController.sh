@@ -61,7 +61,8 @@ done
 # resource names/tags are targeted.
 # =============================================================================
 AWS_REGION="${AWS_DEFAULT_REGION:-us-east-1}"
-EC2_HOST_NAME="${EC2_CONTROLLER_HOST_NAME:-ec2-controller.acaternberg.aws.ps.beescloud.com}"
+source "$(dirname "${BASH_SOURCE[0]}")/_cleanup-lib.sh"
+EC2_HOST_NAME="${EC2_CONTROLLER_HOST_NAME:-ec2-controller.${CJOC_HOST_NAME#*.}}"
 EC2_INSTANCE_NAME="${EC2_CONTROLLER_INSTANCE_NAME:-${CLUSTER_NAME}-ec2-controller}"
 EC2_CONTROLLER_PORT="${EC2_CONTROLLER_PORT:-8080}"
 
@@ -204,6 +205,8 @@ if [[ "$DELETE_CERT" == true ]]; then
   else
     log "No certificate found for '${EC2_HOST_NAME}'."
   fi
+  # ACM does not remove its DNS-validation CNAME with the certificate.
+  delete_acm_validation_cnames "${EC2_HOST_NAME}"
 else
   log "Leaving the ACM certificate in place (pass --delete-cert to remove it)."
 fi

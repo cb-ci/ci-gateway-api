@@ -66,7 +66,7 @@ done
 # CONFIG (all overridable via .env)
 # =============================================================================
 AWS_REGION="${AWS_DEFAULT_REGION:-us-east-1}"
-EC2_HOST_NAME="${EC2_CONTROLLER_HOST_NAME:-ec2-controller.acaternberg.aws.ps.beescloud.com}"
+EC2_HOST_NAME="${EC2_CONTROLLER_HOST_NAME:-ec2-controller.${CJOC_HOST_NAME#*.}}"
 EC2_INSTANCE_NAME="${EC2_CONTROLLER_INSTANCE_NAME:-${CLUSTER_NAME}-ec2-controller}"
 EC2_INSTANCE_TYPE="${EC2_CONTROLLER_INSTANCE_TYPE:-t3.medium}"
 EC2_VOLUME_SIZE_GB="${EC2_CONTROLLER_VOLUME_SIZE:-50}"

@@ -102,6 +102,7 @@ The following scripts are **operational** — run them any time after the initia
 ```
 09-deleteAll.sh   (each step runs only if its resources are detected)
    │
+   ├─ scale node pools up if the LB controller cannot run (needed to remove the ALB)
    ├─ 07-deleteEC2WithController.sh --delete-cert          optional add-on
    ├─ 05-deleteCloudBees.sh --delete-data --delete-namespace
    ├─ 07-deleteS3PlugableStorage-LogsBucket.sh   (DESTRUCTIVE)   optional
@@ -110,7 +111,8 @@ The following scripts are **operational** — run them any time after the initia
    ├─ 04-deleteEnvoy.sh --delete-crds --delete-cert   (Ingress → ALB first)
    ├─ 06-deleteExternalDNS.sh                    (waits for Route53 record sync)
    ├─ 02-delete-efs-filesystem.sh                (no prompt)     optional
-   ├─ eksctl delete cluster
+   ├─ leftover ACM validation CNAMEs, leftover LB controller security groups
+   ├─ eksctl delete cluster                      (retried; janitor removes SGs meanwhile)
    └─ orphan report (read-only)
 ```
 
@@ -125,9 +127,12 @@ source .env
 - **Auto-detection.** Each step runs only if its resources exist (EC2 add-on, Helm releases, buckets, EFS, ACM certs, IAM) and is shown as `[DELETE]` or `[skip]` in the plan. If the cluster is gone, the AWS-side steps still run.
 - **Irreversible.** It deletes JENKINS_HOME volumes, the three S3 buckets with all their objects, the ACM certificates and the Gateway API/Envoy CRDs. Nothing is deleted before the plan is confirmed.
 - **Fail-stop and re-runnable.** A failing step aborts the run; the delete scripts are idempotent, so fix the cause and run it again.
+- **Self-healing, no manual cleanup.** If the AWS Load Balancer Controller cannot run (for example node pools scaled to 0), the script scales the pools up with `01-scaleUpNodePools.sh` first, so the controller can remove the ALB. Leftover LB controller security groups (they block VPC deletion) are deleted, scoped to this cluster's VPC and its `elbv2.k8s.aws/cluster` tag or `k8s-traffic-<cluster>-*` name; a background janitor keeps removing them while `eksctl delete cluster` waits. A failed or raced `eksctl delete cluster` is retried up to 3 times, and stacks in `DELETE_FAILED` are deleted directly in CloudFormation. ACM DNS-validation CNAMEs (`_<hex>.<host>`, pointing at `*.acm-validations.aws.`) are removed with the certificate. These safety-net cleanups also run when the cluster is already gone: unused ACM certificates for the CJOC/EC2 host that carry the tag `cb-user=$TAG_CB_USER`; the host's Route53 A alias once no load balancer with that DNS name exists; and the external-dns TXT registry records (`<host>`, `a-<host>`, `cname-<host>`) whose owner is this cluster's `TXT_OWNER_ID` (default `CLUSTER_NAME`). Exact host names only, records of other owners are never touched. These helpers live in [`_cleanup-lib.sh`](_cleanup-lib.sh).
+- **Only one prompt.** Without `--yes` you type the cluster name once; nothing else asks.
+- **Status:** the retry and cleanup paths were exercised only against stubbed `aws`/`eksctl` commands, not a real account. Run `--dry-run` first.
 - **Not covered by a delete script:** `03-*` (LB controller, Cluster Autoscaler) and `08-createServiceAccountforRemoteAgents.sh` live inside the cluster and are removed with it.
-- **Orphan report.** Lists remaining CloudFormation stacks, resources tagged for the cluster (ALBs, ENIs, security groups, EBS volumes), the named S3/EFS/IAM/ACM/Route53 resources and EC2 add-on. It only reports; it never deletes.
-- **Individual scripts** still work standalone; the three S3 delete scripts and `06-deleteExternalDNS.sh` accept `--yes`. Run `04-deleteEnvoy.sh` before `06-deleteExternalDNS.sh`, because external-dns removes the Route53 records only after the Ingress is gone.
+- **Orphan report.** Lists remaining CloudFormation stacks, resources tagged for the cluster (ALBs, ENIs, security groups, EBS volumes), the named S3/EFS/IAM/ACM/Route53 resources, leftover `k8s-*-<cluster>-*` security groups created by the LB controller (they block VPC deletion) and the EC2 add-on. Stale tag-index entries (terminated instances, deleted NAT gateways, non-existent volumes) are ignored. It only reports; it never deletes.
+- **Individual scripts** still work standalone; the three S3 delete scripts and `06-deleteExternalDNS.sh` accept `--yes`. Run `04-deleteEnvoy.sh` before `06-deleteExternalDNS.sh`, because external-dns removes the Route53 records only after the Ingress is gone. `04-deleteEnvoy.sh` and `07-deleteEC2WithController.sh` also delete the certificate's DNS-validation CNAME with `--delete-cert`.
 
 ### Applying IAM-only config changes to an existing cluster
 
@@ -257,7 +262,7 @@ agent pods will stay `Pending` indefinitely.
 | 03 | [`03-installAwsLbController.sh`](03-installAwsLbController.sh) | Installs the AWS Load Balancer Controller via Helm using the IRSA ServiceAccount eksctl already created, applies its CRDs, and verifies public subnets carry the `kubernetes.io/role/elb=1` tag the controller needs to place an ALB. |
 | 03 | [`03-installClusterAutoscaler.sh`](03-installClusterAutoscaler.sh) | Installs Kubernetes Cluster Autoscaler via Helm using the IRSA ServiceAccount eksctl created (`wellKnownPolicies.autoScaler`), matches the image tag to the cluster's live Kubernetes minor version, and verifies the node groups' ASGs are tagged for auto-discovery (automatic since `minSize != maxSize` on `controllers`, `agents` and `system`). Also grants supplemental read-only RBAC on the `resource.k8s.io` API group (Dynamic Resource Allocation objects), which newer autoscaler builds watch unconditionally but the Helm chart's bundled ClusterRole doesn't grant. Independent of the ALB/Envoy chain — run any time after [`01-createCluster.sh`](01-createCluster.sh). |
 | 04 | [`04-installEnvoy.sh`](04-installEnvoy.sh) | Installs Envoy Gateway, requests/validates the ACM certificate for `CJOC_HOST_NAME` (with automated Route53 DNS validation), and creates the Gateway/GatewayClass/HTTPRoute plumbing plus the `cjoc-alb` Ingress that provisions the **shared internet-facing ALB**. |
-| 04 | [`04-deleteEnvoy.sh`](04-deleteEnvoy.sh) | Tears down the Ingress (deprovisioning the ALB), Gateway API resources, and the Envoy Gateway Helm release. Leaves the CloudBees namespace, CRDs, and ACM certificate in place unless `--delete-crds` / `--delete-cert` are passed. `--yes` skips the prompt. |
+| 04 | [`04-deleteEnvoy.sh`](04-deleteEnvoy.sh) | Tears down the Ingress (deprovisioning the ALB), Gateway API resources, and the Envoy Gateway Helm release. Refuses to delete the Ingress unless the AWS Load Balancer Controller has a ready replica (otherwise the finalizer hangs and the ALB and its `k8s-traffic-*` security group are orphaned; override with `--skip-lbc-check`). Leaves the CloudBees namespace, CRDs, and ACM certificate in place unless `--delete-crds` / `--delete-cert` are passed. `--yes` skips the prompt. |
 | 05 | [`05-installCloudBees.sh`](05-installCloudBees.sh) | Installs CloudBees CI (Operations Center / CJOC) via the `cloudbees/cloudbees-core` Helm chart, wired to the Gateway from step 04, and waits for the Gateway to get an address. Optional parts are switched on in `.env` (see [Optional install flags](#optional-install-flags-05-installcloudbeessh)). |
 | 05 | [`05-deleteCloudBees.sh`](05-deleteCloudBees.sh) | Uninstalls the CloudBees CI Helm release and stops managed controllers, keeping their volumes by default. `--delete-data` also deletes the PVCs (JENKINS_HOME), `--delete-namespace` the namespaces (requires `--delete-data`), `--keep-controllers` leaves managed controllers running, `--yes` skips the prompt. |
 | 06 | [`06-installExternalDNS.sh`](06-installExternalDNS.sh) | Installs `external-dns` (via EKS Pod Identity) scoped to a least-privilege, hosted-zone-specific IAM policy, so Route53 A records for `CJOC_HOST_NAME` are created/kept in sync automatically from the Ingress. |
