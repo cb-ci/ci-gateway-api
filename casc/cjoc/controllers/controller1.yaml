@@ -35,8 +35,6 @@ items:
       - customWebhookData: {}
       - sharedHeaderLabelOptIn:
           optIn: true
-      - healthReporting:
-          enabled: true
       - owner:
           delay: 1
           owners: ''
