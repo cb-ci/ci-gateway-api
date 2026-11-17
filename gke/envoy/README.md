@@ -18,6 +18,34 @@ By using Envoy Gateway, you can use the same Gateway API resources (Gateway, HTT
 
 ## Getting Started
 
+### 0. Node pools (once per cluster)
+
+Mirrors the three managed node groups of the EKS setup (`eks/eksctl/eksctl-config.yaml.tpl`). Run before the install scripts so the Operations Center has a `controllers` node to land on.
+
+| Pool | Default machine | Disk | Label | Taint |
+| :--- | :--- | :--- | :--- | :--- |
+| `controllers` | `e2-standard-4` | 80 GB | `workload=controller` | `workload=controller:NoSchedule` |
+| `agents` | `e2-standard-4` | 100 GB | `workload=agent` | `workload=agent:NoSchedule` |
+| `system` | `e2-standard-2` | 60 GB | `workload=system` | none |
+
+Each pool starts at 1 node and uses GKE's node autoscaler (min 1, max 2), pinned to `ZONE`. `system` is untainted on purpose: CoreDNS/kube-dns, the CSI controllers and Envoy Gateway don't tolerate the custom taints and need somewhere to run. Machine types and sizes can be overridden in `gke/.env` (see `gke/.env-template`).
+
+Differences from EKS: `controllers` is x86_64 (EKS uses Graviton `m7g`), and private nodes are a cluster-level GKE setting, not per pool.
+
+```bash
+./00-createNodePools.sh --dry-run             # review the gcloud commands
+./00-createNodePools.sh                       # create missing pools (idempotent)
+./00-createNodePools.sh --delete-default-pool # optional: drop `default-pool` afterwards
+
+./00-scaleDownNodePools.sh --drain            # park the environment (state saved to .nodepool-scale-state.json)
+./00-scaleUpNodePools.sh                      # restore sizes + autoscaling
+./00-deleteNodePools.sh                       # remove the three pools (or: ./uninstall.sh --delete-nodepools)
+```
+
+The install scripts pin the Operations Center to `controllers` (`OperationsCenter.NodeSelector` + `Tolerations`). Managed controllers and agent pods get their tolerations from the CasC bundle (`casc/cjoc/controllers/`).
+
+> Validate in a test cluster first: resizing/deleting pools evicts all pods on them.
+
 ### 1. Installation
 
 Run the installation script to deploy Envoy Gateway and CloudBees CI. It generates a self-signed SSL certificate for `CJOC_HOST_NAME` automatically as part of the run — you don't need to generate one manually first.

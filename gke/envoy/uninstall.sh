@@ -15,6 +15,17 @@ source "${ROOT_DIR}/scripts/_functions.sh"
 # Load environment variables
 load_env "${SCRIPT_DIR}/../.env"
 
+# Optional: --delete-nodepools also removes the controllers/agents/system pools
+# (see 00-deleteNodePools.sh). Off by default so the pools can be reused.
+DELETE_NODEPOOLS=false
+for arg in "$@"; do
+    case "${arg}" in
+        --delete-nodepools) DELETE_NODEPOOLS=true ;;
+        -h|--help) echo "Usage: $0 [--delete-nodepools]"; exit 0 ;;
+        *) error "unknown flag '${arg}' (try --help)" ;;
+    esac
+done
+
 # --- Configuration ---
 NAMESPACE=${NAMESPACE:-cloudbees-envoy}
 ENVOY_GW_NAMESPACE=envoy-gateway-system
@@ -57,6 +68,13 @@ kubectl patch namespace "${NAMESPACE}" -p '{"metadata":{"finalizers":null}}' --t
 
 kubectl delete namespace "${ENVOY_GW_NAMESPACE}" --ignore-not-found --timeout=20s || \
 kubectl patch namespace "${ENVOY_GW_NAMESPACE}" -p '{"metadata":{"finalizers":null}}' --type=merge 2>/dev/null
+
+if [[ "${DELETE_NODEPOOLS}" == true ]]; then
+    log "Deleting node pools..."
+    "${SCRIPT_DIR}/00-deleteNodePools.sh"
+else
+    log "Node pools kept. Remove them with: ${SCRIPT_DIR}/00-deleteNodePools.sh"
+fi
 
 success "Cleanup completed successfully."
 

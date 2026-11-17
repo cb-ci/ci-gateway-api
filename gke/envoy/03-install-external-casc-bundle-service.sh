@@ -69,6 +69,8 @@ helm upgrade --install cloudbees-core-envoy cloudbees/cloudbees-core \
   --set OperationsCenter.Protocol=https \
   --set Agents.SeparateNamespace.Enabled=false \
   --set Persistence.StorageClass="${CLOUDBEES_STORAGE_CLASS}" \
+  --set OperationsCenter.NodeSelector.workload=controller \
+  --set-json 'OperationsCenter.Tolerations=[{"key":"workload","operator":"Equal","value":"controller","effect":"NoSchedule"}]' \
   --set Common.image.tag='latest' \
   --set OperationsCenter.CasC.Enabled=true \
   --set OperationsCenter.CasC.Retriever.Enabled=true \
