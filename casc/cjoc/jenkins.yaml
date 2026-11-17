@@ -26,38 +26,6 @@ jenkins:
 cloudBeesCasCServer:
   disableRemoteValidation: false
   visibility: true
-#https://$(HOSTNAME}/cjoc/manage/masterProvisioning/, Configure Controller Provisioning -> Container images            
-masterprovisioning:
-  # dockerImageDefinitionConfiguration:
-  #   images:
-  #   - imageTag: "${controllerImageTagCurrentVersion}"
-  #     name: "${controllerImageNameCurrent}"
-  #   - imageTag: "${controllerImageTagPreviousVersion}"
-  #     name: "${controllerImageNamePrevious}"
-  kubernetes:
-    clusterEndpoints:
-    - id: "default"
-      jenkinsUrl: "http://cjoc.${NAMESPACE}.svc.cluster.local/cjoc/"
-      name: "kubernetes"
-      serviceExposure:
-        gateway:
-          gatewayName: "${GATEWAY_NAME}"
-          gatewayNamespace: "${NAMESPACE}"
-      storageClassName: "${CONTROLLER_STORAGE_CLASS}"
-      webSocket: true
-    cpus: "1.0"
-    disk: 50
-    fsGroup: "1000"
-    globalJavaOptions: "-Dorg.csanchez.jenkins.plugins.kubernetes.pipeline.PodTemplateStepExecution.defaultImage=cloudbees/cloudbees-core-agent:${AGENT_VERSION}\
-      \ -Dcom.cloudbees.jenkins.plugins.kube.ServiceAccountFilter.defaultServiceAccount=jenkins-agents\
-      \ -Dcom.cloudbees.networking.useSubdomain=false -Dcom.cloudbees.networking.protocol=\"\
-      https\" -Dcom.cloudbees.networking.hostname=\"${GATEWAY_DOMAIN}\"\
-      \ -Dcom.cloudbees.networking.port=${GATEWAY_PORT} -Dcom.cloudbees.networking.operationsCenterName=\"\
-      cjoc\""
-    javaOptions: "-XshowSettings:vm -XX:+AlwaysPreTouch -XX:+DisableExplicitGC -XX:+ParallelRefProcEnabled\
-      \ -XX:+UseStringDeduplication -XX:+AlwaysActAsServerClassMachine -Dhudson.slaves.NodeProvisioner.initialDelay=0\
-      \ -XX:-OmitStackTraceInFastThrow"
-    memory: 3072
 #https://$(HOSTNAME}/cjoc/manage/configureSecurity/, Security -> Security Setting Enforcement
 security:
   securitySettingsEnforcement:

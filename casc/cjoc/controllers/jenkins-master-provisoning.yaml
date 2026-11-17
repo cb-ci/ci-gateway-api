@@ -1,0 +1,83 @@
+# https://$(HOSTNAME}/cjoc/manage/masterProvisioning/, Configure Controller Provisioning
+masterprovisioning:
+  # dockerImageDefinitionConfiguration:
+  #   images:
+  #   - imageTag: "${controllerImageTagCurrentVersion}"
+  #     name: "${controllerImageNameCurrent}"
+  #   - imageTag: "${controllerImageTagPreviousVersion}"
+  #     name: "${controllerImageNamePrevious}"
+  kubernetes:
+    clusterEndpoints:
+    - id: "default"
+      jenkinsUrl: "http://cjoc.${NAMESPACE}.svc.cluster.local/cjoc/"
+      name: "kubernetes"
+      serviceExposure:
+        gateway:
+          gatewayName: "${GATEWAY_NAME}"
+          gatewayNamespace: "${NAMESPACE}"
+      storageClassName: "${CONTROLLER_STORAGE_CLASS}"
+      webSocket: true
+    cpus: "1.0"
+    disk: 50
+    fsGroup: "1000"
+    globalJavaOptions: "-Dorg.csanchez.jenkins.plugins.kubernetes.pipeline.PodTemplateStepExecution.defaultImage=cloudbees/cloudbees-core-agent:${AGENT_VERSION}\
+      \ -Dcom.cloudbees.jenkins.plugins.kube.ServiceAccountFilter.defaultServiceAccount=jenkins-agents\
+      \ -Dcom.cloudbees.networking.useSubdomain=false -Dcom.cloudbees.networking.protocol=\"\
+      https\" -Dcom.cloudbees.networking.hostname=\"${GATEWAY_DOMAIN}\"\
+      \ -Dcom.cloudbees.networking.port=${GATEWAY_PORT} -Dcom.cloudbees.networking.operationsCenterName=\"\
+      cjoc\""
+    javaOptions: "-XshowSettings:vm -XX:+AlwaysPreTouch -XX:+DisableExplicitGC -XX:+ParallelRefProcEnabled\
+      \ -XX:+UseStringDeduplication -XX:+AlwaysActAsServerClassMachine -Dhudson.slaves.NodeProvisioner.initialDelay=0\
+      \ -XX:-OmitStackTraceInFastThrow"
+    memory: 3072
+    yaml: |-
+      # This needs to be applied under CJOC-> Manage Jenkins-> Controller Provisioning -> YAML patch for Controller to take effect
+      ---
+      apiVersion: "apps/v1"
+      kind: "StatefulSet"
+      spec:
+        template:
+          metadata:
+            annotations:
+              cluster-autoscaler.kubernetes.io/safe-to-evict: "false"
+          spec:
+            tolerations:
+              - key: "workload"
+                operator: "Equal"
+                value: "controller"
+                effect: "NoSchedule"
+            nodeSelector:
+              workload: "controller"
+            affinity:
+              nodeAffinity:
+                requiredDuringSchedulingIgnoredDuringExecution:
+                  nodeSelectorTerms:
+                    - matchExpressions:
+                        - key: "kubernetes.io/os"
+                          operator: "In"
+                          values:
+                            - "linux"
+                        - key: "workload"
+                          operator: "In"
+                          values:
+                            - "controller"
+              podAntiAffinity:
+                preferredDuringSchedulingIgnoredDuringExecution:
+                  - podAffinityTerm:
+                      labelSelector:
+                        matchExpressions:
+                          - key: "com.cloudbees.cje.type"
+                            operator: "In"
+                            values:
+                              - "cjoc"
+                      topologyKey: "kubernetes.io/hostname"
+                    weight: 1
+                  - podAffinityTerm:
+                      labelSelector:
+                        matchExpressions:
+                          - key: "jenkins"
+                            operator: "In"
+                            values:
+                              - "slave"
+                      topologyKey: "kubernetes.io/hostname"
+                    weight: 1
