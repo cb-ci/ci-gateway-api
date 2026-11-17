@@ -21,3 +21,4 @@ plugins:
   - id: operations-center-webhooks # cap src
   - id: trilead-api # cap src
   - id: unique-id # cap src
+  - id: operations-center-clusterops # cap src

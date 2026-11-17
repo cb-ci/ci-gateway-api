@@ -11,3 +11,7 @@ githubAppPrivkey.pem
 **/tmp
 /casc/export/*
 scripts/casc/tmpcascworkdir
+eks/eksctl/.nodepool-scale-state.json
+eks/eksctl/.nodepool-scale-state.json.autoscaler
+eks/eksctl/.nodepool-scale-state copy.json
+minikube/*
