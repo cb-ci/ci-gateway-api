@@ -30,12 +30,12 @@ items:
             store:
               s3Store:
                 usePathStyleUrl: false
-                bucketName: ${S3BUCKET}
+                bucketName: ${BACKUP_S3_BUCKET}
                 sse: true
                 useHttp: false
-                bucketFolder: ${S3BUCKET_FOLDER}
+                bucketFolder: ${BACKUP_S3_BUCKET_FOLDER}
                 credentialsId: ''
-                region: ${AWS_REGION}
+                region: ${BACKUP_AWS_REGION}
         timeoutSeconds: 300
         itemSource:
           jenkinsRootItemSource: {
