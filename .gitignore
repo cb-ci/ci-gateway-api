@@ -15,3 +15,6 @@ eks/eksctl/.nodepool-scale-state.json
 eks/eksctl/.nodepool-scale-state.json.autoscaler
 eks/eksctl/.nodepool-scale-state copy.json
 minikube/*
+
+# GKE node pool scale state
+gke/envoy/.nodepool-scale-state.json

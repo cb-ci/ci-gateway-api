@@ -61,6 +61,11 @@ vpc:
     publicAccess: true # kubectl / CI/CD pipelines reach the API server over the internet
     privateAccess: true # nodes/pods reach the API server via the VPC-private endpoint (required for private-subnet nodes)
 
+  # Restrict the public endpoint (default is 0.0.0.0/0). Tailscale app connector per CloudBees doc.
+  # Sibling of clusterEndpoints, not a child of it.
+  # Existing cluster: eksctl utils set-public-access-cidrs --cluster <name> 34.224.186.68/32 --approve
+  publicAccessCIDRs: [${EKS_PUBLIC_ACCESS_CIDRS}]
+
 # =============================================================================
 # IAM (cluster-level) — required for IRSA used by add-ons/service accounts below
 # =============================================================================

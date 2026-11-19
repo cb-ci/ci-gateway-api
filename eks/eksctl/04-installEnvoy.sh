@@ -221,7 +221,53 @@ done
 [[ -n "${ENVOY_SVC}" ]] || error "Envoy Service never appeared in ${ENVOY_GW_NAMESPACE} — check 'kubectl get gateway -n ${NAMESPACE_CLOUDBEES}'"
 success "Envoy Service: ${ENVOY_SVC}"
 
-log "Applying Ingress (provisions the public ALB)..."
+# --- ALB source allowlist (Tailscale + GitHub webhooks + NAT egress) ---
+# Without alb.ingress.kubernetes.io/inbound-cidrs the controller creates a
+# k8s-traffic-* security group open to 0.0.0.0/0. Build an explicit allowlist:
+#   - Tailscale app connector(s)   ALB_TAILSCALE_CIDRS (CloudBees Tailscale doc)
+#   - GitHub webhook source ranges ALB_ALLOW_GITHUB_WEBHOOKS (api.github.com/meta, "hooks")
+#   - the cluster NAT gateway EIP  ALB_ALLOW_NAT_EIP (pods/agents calling the public URL)
+#   - anything else                ALB_EXTRA_CIDRS
+# Each CIDR becomes one SG rule per listener port (default SG quota: 60 rules).
+command -v jq >/dev/null || error "jq not found on PATH"
+INBOUND_CIDRS="${ALB_TAILSCALE_CIDRS:-},${ALB_EXTRA_CIDRS:-}"
+
+if [[ "${ALB_ALLOW_GITHUB_WEBHOOKS:-true}" == "true" ]]; then
+  log "Fetching GitHub webhook source ranges (api.github.com/meta)..."
+  # IPv4 only: the ALB is not dual-stack.
+  GH_HOOKS=$(curl -fsS -m 15 https://api.github.com/meta | jq -r '.hooks[] | select(contains(":") | not)') \
+    || error "could not fetch GitHub webhook ranges; set ALB_ALLOW_GITHUB_WEBHOOKS=false or retry"
+  [[ -n "${GH_HOOKS}" ]] || error "GitHub meta returned no IPv4 hook ranges"
+  INBOUND_CIDRS="${INBOUND_CIDRS},$(printf '%s\n' "${GH_HOOKS}" | paste -sd, -)"
+fi
+
+if [[ "${ALB_ALLOW_NAT_EIP:-true}" == "true" ]]; then
+  log "Resolving NAT gateway EIP for cluster VPC..."
+  _vpc=$(aws eks describe-cluster --name "${CLUSTER_NAME}" --region "${AWS_REGION}" \
+    --query 'cluster.resourcesVpcConfig.vpcId' --output text)
+  NAT_EIPS=$(aws ec2 describe-nat-gateways --region "${AWS_REGION}" \
+    --filter "Name=vpc-id,Values=${_vpc}" "Name=state,Values=available" \
+    --query 'NatGateways[].NatGatewayAddresses[].PublicIp' --output text)
+  [[ -n "${NAT_EIPS}" && "${NAT_EIPS}" != "None" ]] || error "no NAT gateway EIP found in ${_vpc}; set ALB_ALLOW_NAT_EIP=false to skip"
+  INBOUND_CIDRS="${INBOUND_CIDRS},$(printf '%s/32\n' ${NAT_EIPS} | paste -sd, -)"
+fi
+
+# De-duplicate, drop empties, join with commas.
+ALB_INBOUND_CIDRS=$(printf '%s' "${INBOUND_CIDRS}" | tr ',' '\n' | sed '/^$/d' | sort -u | paste -sd, -)
+[[ -n "${ALB_INBOUND_CIDRS}" ]] || error "ALB source allowlist is empty; refusing to create an open ALB"
+log "ALB inbound-cidrs: ${ALB_INBOUND_CIDRS}"
+
+# ASSUMPTION: HTTP:80 is dropped (it only redirected to 443), which halves the SG
+# rule count. Set ALB_LISTEN_HTTP=true to restore the 80 -> 443 redirect.
+if [[ "${ALB_LISTEN_HTTP:-false}" == "true" ]]; then
+  ALB_LISTEN_PORTS='[{"HTTP":80},{"HTTPS":443}]'
+  ALB_SSL_REDIRECT_ANNOTATION="alb.ingress.kubernetes.io/ssl-redirect: '443'"
+else
+  ALB_LISTEN_PORTS='[{"HTTPS":443}]'
+  ALB_SSL_REDIRECT_ANNOTATION="# ssl-redirect omitted: no HTTP listener"
+fi
+
+log "Applying Ingress (provisions the ALB, restricted to the allowlist above)..."
 cat <<EOF | kubectl apply -f -
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -232,9 +278,10 @@ metadata:
   annotations:
     alb.ingress.kubernetes.io/scheme: internet-facing
     alb.ingress.kubernetes.io/target-type: ip
-    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80},{"HTTPS":443}]'
+    alb.ingress.kubernetes.io/inbound-cidrs: "${ALB_INBOUND_CIDRS}"
+    alb.ingress.kubernetes.io/listen-ports: '${ALB_LISTEN_PORTS}'
     alb.ingress.kubernetes.io/certificate-arn: "${ACM_CERT_ARN}"
-    alb.ingress.kubernetes.io/ssl-redirect: '443'
+    ${ALB_SSL_REDIRECT_ANNOTATION}
     alb.ingress.kubernetes.io/backend-protocol: HTTP
     # ALB defaults to a 60s idle timeout, which severs Jenkins long-polling and
     # SSE build-log streams mid-request. 4000s is the ALB maximum.
