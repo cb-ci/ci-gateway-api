@@ -4,6 +4,9 @@ Provisions a demo CloudBees CI environment on Amazon EKS: a cluster with
 dedicated controller/agent/system node pools, a shared Application Load
 Balancer fronting an in-cluster Operations Center (CJOC) and an optional
 standalone EC2-hosted Client Controller, TLS via ACM, and DNS via Route53.
+Both the ALB and the EKS public API endpoint are restricted to an explicit
+source allowlist (VPN connector, GitHub webhooks, NAT EIP) — see
+[Network access restrictions](#network-access-restrictions).
 
 ## Layout
 
@@ -11,8 +14,8 @@ Three root modules, applied in order:
 
 | | Creates |
 | --- | --- |
-| `01-infra/` | VPC, EKS cluster, 3 node groups, addons, IRSA + Pod Identity roles (incl. cluster-autoscaler), EFS, ACM certificate |
-| `02-platform/` | AWS Load Balancer Controller, Cluster Autoscaler, Envoy Gateway, Gateway API resources, ALB Ingress, StorageClass, CloudBees CI, external-dns, jenkins-agent ServiceAccount/RBAC/token for the remote Kubernetes Cloud |
+| `01-infra/` | VPC, EKS cluster (public endpoint restricted to `public_access_cidrs`), 3 node groups, addons, IRSA + Pod Identity roles (incl. cluster-autoscaler), EFS, ACM certificate |
+| `02-platform/` | AWS Load Balancer Controller, Cluster Autoscaler, Envoy Gateway, Gateway API resources, ALB Ingress (source-restricted via `inbound-cidrs`), StorageClass, CloudBees CI, external-dns, jenkins-agent ServiceAccount/RBAC/token for the remote Kubernetes Cloud |
 | `03-ec2-controller/` *(optional)* | Standalone EC2 Client Controller: security group, IAM role/instance profile, ACM cert (SNI), EC2 instance, target group + host-header listener rule on the shared ALB, Route53 alias record, cluster-security-group rule for API access |
 
 `03-ec2-controller` is entirely optional — skip it if you don't need a
@@ -86,8 +89,89 @@ a patch adding to it can be silently dropped. `nodeSelector` and
 otherwise populate, so they aren't subject to that collision; don't rely on
 an `affinity` addition taking effect until confirmed live.
 
+## Network access restrictions
+
+Neither entry point is open to `0.0.0.0/0`. The same model is implemented in
+`../eksctl/` (`ALB_*` / `EKS_PUBLIC_ACCESS_CIDRS` in `.env-template`).
+
+### EKS API endpoint (`01-infra`)
+
+`aws_eks_cluster.this` sets `public_access_cidrs = var.public_access_cidrs`.
+The variable has **no default** and is validated: non-empty, valid IPv4 CIDRs,
+and `0.0.0.0/0` is rejected. Use the egress IP of your VPN connector (for
+example a Tailscale app connector). `endpoint_private_access` stays `true`, so
+nodes and pods are unaffected.
+
+The machine running `terraform`, `kubectl` and `helm` must reach the API
+through one of these CIDRs — this includes `02-platform`, whose
+`kubernetes`/`helm`/`kubectl` providers talk to the endpoint. Apply from a
+machine that is on the VPN, or the apply fails with API timeouts.
+
+### ALB (`02-platform`, `envoy.tf`)
+
+Without the `alb.ingress.kubernetes.io/inbound-cidrs` annotation the AWS Load
+Balancer Controller creates a security group open to the internet. The
+`cjoc_alb` Ingress sets it to the de-duplicated union of:
+
+| Source | Variable | Default | Notes |
+| --- | --- | --- | --- |
+| VPN connector egress IP(s) | `alb_tailscale_cidrs` | **required** | Validated like `public_access_cidrs`. The CJOC hostname must also be routed through the connector, or users on the VPN cannot reach it. |
+| GitHub webhook ranges | `alb_allow_github_webhooks` | `true` | IPv4 `hooks` list from `https://api.github.com/meta`, read by `data "http"` at plan time. Plans show a change whenever GitHub updates its ranges, and the plan fails if the runner cannot reach `api.github.com`. |
+| NAT gateway EIP(s) | `alb_allow_nat_eip` | `true` | From the `nat_public_ips` output of `01-infra`, so pods/agents that call the public CJOC URL are not blocked. |
+| Anything else | `alb_extra_cidrs` | `[]` | |
+
+A `precondition` on the Ingress refuses to apply with an empty list.
+
+- **HTTP:80 is off by default.** `alb_listen_http = false` creates an HTTPS-only
+  listener and omits the `ssl-redirect` annotation. Set it to `true` to restore
+  the 80 → 443 redirect; this doubles the security group rule count.
+- **Rule quota.** Each CIDR becomes one SG rule per listener port, and the
+  default quota is 60 rules per security group. GitHub's hook list is most of
+  the count — check the number of CIDRs in the plan, and request a quota
+  increase or set `alb_allow_github_webhooks = false` if you are near the limit.
+- **Webhook exposure.** GitHub's ranges are shared by every GitHub customer and
+  a security group cannot filter by path, so any GitHub-hosted sender can reach
+  port 443. Keep webhook secrets and authentication enforced; a WAF rule on the
+  webhook path would tighten this further.
+- **`03-ec2-controller`** trusts the shared ALB's security group, so it inherits
+  this restriction. Its own security group rules are unchanged.
+
+### Applying to an existing environment
+
+1. In `01-infra`, set `public_access_cidrs` in `terraform.tfvars`, then
+   `terraform plan` and `terraform apply`. This changes the live control-plane
+   endpoint and also refreshes the new `nat_public_ips` output that
+   `02-platform` requires. Try it in a test environment first.
+2. In `02-platform`, set `alb_tailscale_cidrs`, `terraform plan`, and review the
+   CIDR count before applying. The controller rewrites the ALB security group
+   when the Ingress changes.
+
+### Verify
+
+```sh
+# CIDRs actually on the ALB security group (find the SG via the ALB's tags/console)
+aws ec2 describe-security-groups --group-ids <alb-sg-id> \
+  --query 'SecurityGroups[0].IpPermissions[].IpRanges[].CidrIp'
+```
+
+- From the VPN, `terraform -chdir=02-platform output cjoc_url` loads; from an
+  off-VPN network the connection times out.
+- In GitHub, "Redeliver" a webhook and confirm a 200 response.
+
+**Locked out of the EKS API?** Your current egress IP is not in
+`public_access_cidrs`. Add it with the AWS CLI using an identity that can call
+the EKS control plane API (this works without reaching the Kubernetes API),
+then reconcile `terraform.tfvars` so the next apply does not revert it:
+
+```sh
+aws eks update-cluster-config --name <cluster-name> --region <region> \
+  --resources-vpc-config publicAccessCidrs=<cidr1>,<cidr2>
+```
+
 ## Prerequisites
 
+- A VPN/connector egress IP for the machine running Terraform (see
+  [Network access restrictions](#network-access-restrictions)).
 - Terraform >= 1.5. `.tool-versions` here pins 1.15.8. Do not fall back to the
   asdf global default of 1.4.6 — it is EOL and cannot run AWS provider 5.9x
   (plugin protocol mismatch, which surfaces as an opaque "Unrecognized remote
@@ -104,11 +188,12 @@ an `affinity` addition taking effect until confirmed live.
 
 ```sh
 cd 01-infra
-cp terraform.tfvars.example terraform.tfvars   # set cjoc_host_name
+cp terraform.tfvars.example terraform.tfvars   # set cjoc_host_name, public_access_cidrs
 terraform init
 terraform apply
 
 cd ../02-platform
+cp terraform.tfvars.example terraform.tfvars   # set alb_tailscale_cidrs
 terraform init
 terraform apply
 ```
@@ -166,7 +251,9 @@ Tear down in reverse: `03-ec2-controller` (if applied) first, then
 
 ```mermaid
 flowchart TD
-    Internet([Internet]) -->|"HTTPS :443 — ACM cert, TLS terminates here"| ALB
+    VPN(["VPN connector egress IP<br/>alb_tailscale_cidrs"]) --> ALB
+    GH(["GitHub webhook ranges<br/>alb_allow_github_webhooks"]) --> ALB
+    NATIP(["NAT gateway EIP<br/>alb_allow_nat_eip"]) -->|"HTTPS :443 — ACM cert, TLS terminates here<br/>(inbound-cidrs allowlist)"| ALB
     ALB["ALB<br/>kubernetes_ingress_v1.cjoc_alb<br/>(AWS Load Balancer Controller)"] -->|"HTTP, target-type: ip"| SVC
     SVC["kubernetes_service.envoy_stable<br/>ClusterIP :8443"] --> Envoy
     Envoy["Envoy pods<br/>Gateway 'https' listener (HTTP:8443)"] --> Route
@@ -185,14 +272,14 @@ flowchart TB
     end
 
     subgraph INFRA["01-infra"]
-        subgraph VPC["module.vpc: VPC, 1 NAT GW, DNS hostnames"]
+        subgraph VPC["module.vpc: VPC, 1 NAT GW (EIP exported as nat_public_ips), DNS hostnames"]
             PUB["Public subnets<br/>tag kubernetes.io/role/elb"]
             PRIV["Private subnets<br/>tag kubernetes.io/role/internal-elb"]
             NAT["Single NAT gateway + IGW"]
         end
 
         subgraph EKS["EKS cluster"]
-            CLUSTER["aws_eks_cluster.this<br/>+ cluster IAM role/policy"]
+            CLUSTER["aws_eks_cluster.this<br/>+ cluster IAM role/policy<br/>public endpoint: public_access_cidrs"]
             OIDC["aws_iam_openid_connect_provider"]
             NODEROLE["Node IAM role + policy attachments"]
             NG_C["node_group controllers<br/>ARM64, taint workload=controller"]
@@ -245,7 +332,7 @@ flowchart TB
             NS["kubernetes_namespace.cloudbees"]
             SC["kubernetes_storage_class.efs<br/>(reclaimPolicy: Delete)"]
             CBCI["helm_release.cloudbees_ci<br/>CJOC + HTTPRoute"]
-            ING["kubernetes_ingress_v1.cjoc_alb"]
+            ING["kubernetes_ingress_v1.cjoc_alb<br/>inbound-cidrs allowlist"]
             subgraph RA["Remote agent access (builds namespace)"]
                 RSA["ServiceAccount jenkins-agent"]
                 RROLE["Role + RoleBinding"]
@@ -255,6 +342,8 @@ flowchart TB
     end
 
     ALB{{"Shared ALB<br/>(provisioned by LBC from Ingress)"}}
+    GHMETA[("data.http.github_meta<br/>api.github.com/meta")]
+    TSVAR["var.alb_tailscale_cidrs<br/>var.alb_extra_cidrs"]
 
     %% 01-infra internal wiring
     PUB --- NAT
@@ -288,6 +377,9 @@ flowchart TB
     LBC -->|"reconciles Ingress"| ING
     ING --> ALB
     CVAL -.->|"certificate_arn"| ING
+    GHMETA -.->|"hook CIDRs (IPv4)"| ING
+    TSVAR -.->|"CIDRs"| ING
+    NAT -.->|"nat_public_ips"| ING
     ALB -->|"target-type: ip"| SVC
     SVC --> GW
     GW -->|"HTTPRoute"| CBCI
@@ -304,7 +396,7 @@ and reads VPC/subnet/cluster security group values from `01-infra` via
 
 ```mermaid
 flowchart TB
-    Internet([Internet]) -->|"HTTPS :443<br/>Host: ec2_controller_host_name"| ALB
+    Sources(["Allowlisted sources only<br/>(VPN, GitHub, NAT EIP)"]) -->|"HTTPS :443<br/>Host: ec2_controller_host_name"| ALB
 
     subgraph EXISTING["Existing (owned by 01-infra / 02-platform)"]
         ALB{{"Shared ALB"}}
@@ -376,7 +468,8 @@ CasC).
 
 Optional add-on, applied and destroyed independently of `02-platform`. It
 provisions a second, EC2-hosted CloudBees CI Client Controller that shares
-the same internet-facing ALB as the in-cluster CJOC, distinguished by
+the same ALB as the in-cluster CJOC (internet-facing, but restricted to the
+[allowlist](#alb-02-platform-envoytf) set in `02-platform`), distinguished by
 host-header routing rather than a second load balancer.
 
 ### Why a separate root module
@@ -448,6 +541,12 @@ outputs: `instance_id`, `instance_private_ip` (SSM Session Manager target),
 
 ## Things to verify before the first apply
 
+- **`public_access_cidrs`** (`01-infra`) and **`alb_tailscale_cidrs`**
+  (`02-platform`) have no defaults and the `terraform.tfvars.example` values are
+  documentation placeholders (`203.0.113.0/24` range). Set your real connector
+  egress IP before applying, or you lock yourself out of the API / ALB.
+- **ALB rule count** against the 60-rule security group quota — see
+  [Network access restrictions](#network-access-restrictions).
 - **`lbc_chart_version`** in `02-platform/variables.tf` defaults to `1.14.0`,
   which was not verified against the registry. Check with
   `helm search repo eks/aws-load-balancer-controller --versions` and override
