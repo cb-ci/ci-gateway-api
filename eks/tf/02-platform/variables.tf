@@ -111,6 +111,44 @@ variable "alb_idle_timeout_seconds" {
   default     = 4000
 }
 
+variable "alb_tailscale_cidrs" {
+  description = <<-EOT
+    Tailscale app connector egress IP(s) allowed on the ALB (inbound-cidrs).
+    Mirrors ALB_TAILSCALE_CIDRS in eksctl/.env-template. No default: an unset
+    value must fail rather than create a wide-open or unreachable ALB.
+  EOT
+  type        = list(string)
+
+  validation {
+    condition     = length(var.alb_tailscale_cidrs) > 0 && alltrue([for c in var.alb_tailscale_cidrs : can(cidrhost(c, 0)) && c != "0.0.0.0/0"])
+    error_message = "alb_tailscale_cidrs must be a non-empty list of valid IPv4 CIDRs and must not contain 0.0.0.0/0."
+  }
+}
+
+variable "alb_allow_github_webhooks" {
+  description = "Allow GitHub webhook source ranges (IPv4 'hooks' from api.github.com/meta, read at plan time). The ranges are shared by all GitHub customers; keep webhook secrets enforced."
+  type        = bool
+  default     = true
+}
+
+variable "alb_allow_nat_eip" {
+  description = "Allow the cluster NAT gateway EIP(s) so pods/agents calling the public CJOC URL are not blocked."
+  type        = bool
+  default     = true
+}
+
+variable "alb_extra_cidrs" {
+  description = "Additional CIDRs allowed on the ALB."
+  type        = list(string)
+  default     = []
+}
+
+variable "alb_listen_http" {
+  description = "Also listen on HTTP:80 with a redirect to 443. Doubles the ALB security group rule count (default quota: 60 rules per SG)."
+  type        = bool
+  default     = false
+}
+
 variable "remote_agent_namespace" {
   description = <<-EOT
     Namespace the jenkins-agent ServiceAccount/Role/RoleBinding/token Secret
@@ -127,7 +165,7 @@ variable "tags" {
   description = "Tags propagated to AWS resources created by in-cluster controllers (the ALB)."
   type        = map(string)
   default = {
-    cb-user        = "acaternberg"
+    cb-user        = "USER_ID"
     cb-owner       = "professional-services"
     cb-environment = "demo"
   }

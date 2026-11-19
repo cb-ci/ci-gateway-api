@@ -41,6 +41,9 @@ resource "aws_eks_cluster" "this" {
     # over the internet, nodes in private subnets reach it over the VPC.
     endpoint_public_access  = true
     endpoint_private_access = true
+
+    # Mirrors publicAccessCIDRs in eksctl-config.yaml.tpl.
+    public_access_cidrs = var.public_access_cidrs
   }
 
   access_config {

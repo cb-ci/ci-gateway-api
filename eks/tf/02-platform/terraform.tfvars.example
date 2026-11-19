@@ -1,0 +1,10 @@
+# Copy to terraform.tfvars and edit.
+#   cp terraform.tfvars.example terraform.tfvars
+
+# REQUIRED — no default. Tailscale app connector egress IP(s) allowed on the ALB.
+alb_tailscale_cidrs = ["12.123.123.123/32"]
+
+# alb_allow_github_webhooks = true
+# alb_allow_nat_eip         = true
+# alb_extra_cidrs           = []
+# alb_listen_http           = false

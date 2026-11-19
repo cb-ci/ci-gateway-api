@@ -24,6 +24,11 @@ output "vpc_id" {
   value       = module.vpc.vpc_id
 }
 
+output "nat_public_ips" {
+  description = "NAT gateway EIP(s). 02-platform allows them on the ALB so pods/agents can call the public CJOC URL."
+  value       = module.vpc.nat_public_ips
+}
+
 output "cluster_security_group_id" {
   description = <<-EOT
     EKS-managed "cluster security group". Because endpoint_private_access is

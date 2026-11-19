@@ -7,7 +7,7 @@ variable "region" {
 variable "cluster_name" {
   description = "EKS cluster name. Also used as the prefix for EFS, security groups and IAM roles."
   type        = string
-  default     = "acaternberg"
+  default     = "USER_ID"
 }
 
 variable "kubernetes_version" {
@@ -81,9 +81,26 @@ variable "tags" {
   description = "Tags applied to every taggable resource in this stack."
   type        = map(string)
   default = {
-    cb-user        = "acaternberg"
+    cb-user        = "USER_ID"
     cb-owner       = "professional-services"
     cb-environment = "demo"
+  }
+}
+
+variable "public_access_cidrs" {
+  description = <<-EOT
+    CIDRs allowed to reach the EKS public API endpoint (the AWS default is
+    0.0.0.0/0). Mirrors EKS_PUBLIC_ACCESS_CIDRS in eksctl/.env-template. No
+    default on purpose: the machine running terraform/kubectl/helm (including
+    the 02-platform providers) must reach the API through one of these, e.g.
+    the Tailscale app connector egress IP. Nodes and pods are unaffected
+    because endpoint_private_access stays true.
+  EOT
+  type        = list(string)
+
+  validation {
+    condition     = length(var.public_access_cidrs) > 0 && alltrue([for c in var.public_access_cidrs : can(cidrhost(c, 0)) && c != "0.0.0.0/0"])
+    error_message = "public_access_cidrs must be a non-empty list of valid IPv4 CIDRs and must not contain 0.0.0.0/0."
   }
 }
 

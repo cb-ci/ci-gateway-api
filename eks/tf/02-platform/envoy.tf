@@ -240,6 +240,43 @@ resource "kubernetes_service" "envoy_stable" {
   depends_on = [kubectl_manifest.gateway]
 }
 
+# --- ALB source allowlist -----------------------------------------------------
+# Without alb.ingress.kubernetes.io/inbound-cidrs the controller creates a
+# k8s-traffic-* security group open to 0.0.0.0/0. Each CIDR becomes one SG rule
+# per listener port, so watch the 60-rule default quota (GitHub's list is the
+# bulk of it).
+data "http" "github_meta" {
+  count = var.alb_allow_github_webhooks ? 1 : 0
+
+  url             = "https://api.github.com/meta"
+  request_headers = { Accept = "application/json" }
+
+  lifecycle {
+    postcondition {
+      condition     = self.status_code == 200
+      error_message = "Could not fetch GitHub webhook ranges; set alb_allow_github_webhooks=false or retry."
+    }
+  }
+}
+
+locals {
+  # IPv4 only: the ALB is not dual-stack.
+  github_hook_cidrs = var.alb_allow_github_webhooks ? [
+    for c in jsondecode(data.http.github_meta[0].response_body).hooks : c if !strcontains(c, ":")
+  ] : []
+
+  nat_eip_cidrs = var.alb_allow_nat_eip ? [for ip in local.infra.nat_public_ips : "${ip}/32"] : []
+
+  alb_inbound_cidrs = distinct(concat(
+    var.alb_tailscale_cidrs,
+    var.alb_extra_cidrs,
+    local.github_hook_cidrs,
+    local.nat_eip_cidrs,
+  ))
+
+  alb_listen_ports = var.alb_listen_http ? [{ HTTP = 80 }, { HTTPS = 443 }] : [{ HTTPS = 443 }]
+}
+
 # --- Ingress: this is what actually provisions the ALB ------------------------
 resource "kubernetes_ingress_v1" "cjoc_alb" {
   # Must share a namespace with the Service it targets, not with the Gateway.
@@ -247,12 +284,12 @@ resource "kubernetes_ingress_v1" "cjoc_alb" {
     name      = "cjoc-alb"
     namespace = var.envoy_gw_namespace
 
-    annotations = {
+    annotations = merge({
       "alb.ingress.kubernetes.io/scheme"           = "internet-facing"
       "alb.ingress.kubernetes.io/target-type"      = "ip"
-      "alb.ingress.kubernetes.io/listen-ports"     = jsonencode([{ HTTP = 80 }, { HTTPS = 443 }])
+      "alb.ingress.kubernetes.io/inbound-cidrs"    = join(",", local.alb_inbound_cidrs)
+      "alb.ingress.kubernetes.io/listen-ports"     = jsonencode(local.alb_listen_ports)
       "alb.ingress.kubernetes.io/certificate-arn"  = local.infra.acm_certificate_arn
-      "alb.ingress.kubernetes.io/ssl-redirect"     = "443"
       "alb.ingress.kubernetes.io/backend-protocol" = "HTTP"
 
       "alb.ingress.kubernetes.io/load-balancer-attributes" = "idle_timeout.timeout_seconds=${var.alb_idle_timeout_seconds}"
@@ -265,7 +302,10 @@ resource "kubernetes_ingress_v1" "cjoc_alb" {
       "alb.ingress.kubernetes.io/success-codes"    = "200-404"
 
       "alb.ingress.kubernetes.io/tags" = join(",", [for k, v in var.tags : "${k}=${v}"])
-    }
+      },
+      # Redirect only makes sense when an HTTP listener exists.
+      var.alb_listen_http ? { "alb.ingress.kubernetes.io/ssl-redirect" = "443" } : {}
+    )
   }
 
   spec {
@@ -295,6 +335,13 @@ resource "kubernetes_ingress_v1" "cjoc_alb" {
   # Mirrors the polling loop in the bash version — blocks until the ALB has a
   # DNS name so the output below is populated on first apply.
   wait_for_load_balancer = true
+
+  lifecycle {
+    precondition {
+      condition     = length(local.alb_inbound_cidrs) > 0
+      error_message = "ALB source allowlist is empty; refusing to create an open ALB."
+    }
+  }
 
   depends_on = [
     helm_release.alb_controller,

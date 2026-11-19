@@ -6,6 +6,11 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 5.80"
     }
+    # Reads GitHub's webhook source ranges (api.github.com/meta) for the ALB allowlist.
+    http = {
+      source  = "hashicorp/http"
+      version = "~> 3.4"
+    }
     kubernetes = {
       source  = "hashicorp/kubernetes"
       version = "~> 2.35"
