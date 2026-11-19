@@ -30,6 +30,48 @@ operations center admin password, GitHub App key). Keep it that way.
 
 See [`.env-template`](.env-template) for the full list of variables.
 
+## Network Access (Tailscale VPN and security groups)
+
+The ALB and the EKS API endpoint are **not open to the internet**. Both are restricted to an explicit source allowlist, based on the CloudBees internal *Tailscale VPN* guide (engineering-operations, CloudBees SSO required). The ALB stays `internet-facing`, so it is publicly addressable, but its security group only admits the sources below.
+
+**Prerequisite:** connect to Tailscale before running any script. `eksctl`, `kubectl` and `helm` reach the API server through the allowlisted Tailscale app connector, and so does your browser when you open CJOC.
+
+| Resource | Restricted by | Allowed sources |
+| --- | --- | --- |
+| ALB security group (`k8s-traffic-*`) | `alb.ingress.kubernetes.io/inbound-cidrs` in [`04-installEnvoy.sh`](04-installEnvoy.sh) | Tailscale app connector, GitHub webhook ranges, the cluster's NAT gateway EIP, plus `ALB_EXTRA_CIDRS` |
+| EKS API public endpoint | `vpc.publicAccessCIDRs` in [`eksctl-config.yaml.tpl`](eksctl-config.yaml.tpl) | `EKS_PUBLIC_ACCESS_CIDRS` (default: the Tailscale app connector). Nodes and pods use the private endpoint and are unaffected. |
+
+Variables (all in [`.env-template`](.env-template)):
+
+| Variable | Default | Effect |
+| --- | --- | --- |
+| `ALB_TAILSCALE_CIDRS` | `XX.XXX.XXX.XXX/32` | Tailscale app connector egress IP(s), comma-separated. Default is `app-connector-us-east-1` from the CloudBees doc; verify it against the current doc, since it can change. |
+| `ALB_ALLOW_GITHUB_WEBHOOKS` | `true` | Adds the IPv4 `hooks` ranges fetched from `api.github.com/meta` at install time. Needs `curl`, `jq` and internet access; the script aborts if the fetch fails. |
+| `ALB_ALLOW_NAT_EIP` | `true` | Adds the cluster VPC's NAT gateway EIP, so pods and agents that call `CJOC_HOST_NAME` through the public ALB are not blocked. The script aborts if no NAT EIP is found. |
+| `ALB_EXTRA_CIDRS` | empty | Additional comma-separated CIDRs. |
+| `ALB_LISTEN_HTTP` | `false` | `false` = HTTPS :443 only. `true` = also HTTP :80 with a redirect to 443; this doubles the number of SG rules. |
+| `EKS_PUBLIC_ACCESS_CIDRS` | `"XX.XXX.XXX.XXX/32"` | Quoted, comma-separated list rendered into `publicAccessCIDRs`. Keep the inner double quotes, e.g. `'"1.2.3.4/32","5.6.7.8/32"'`. |
+
+Notes:
+
+- **Empty allowlist is refused.** `04-installEnvoy.sh` aborts rather than create an open ALB. If `EKS_PUBLIC_ACCESS_CIDRS` is unset in an older `.env`, the template renders `publicAccessCIDRs: []`; re-sync `.env` from [`.env-template`](.env-template).
+- **SG rule quota.** Each CIDR is one security group rule per listener port (default quota: 60 rules per SG). Check the resulting count if you add many extras or enable `ALB_LISTEN_HTTP`.
+- **Webhook exposure.** GitHub's webhook ranges are shared by all GitHub customers, and a security group cannot filter by path. Any GitHub-hosted sender can reach port 443, so keep webhook secrets and authentication enforced. A WAF rule on the webhook path would tighten this.
+- **Hostname routing.** `CJOC_HOST_NAME` (`ci.<USER_ID>.aws.ps.beescloud.com`) must resolve and route through Tailscale VPN.
+- **EC2 controller.** [`07-createEC2WithController.sh`](07-createEC2WithController.sh) allows 8080/80/443 from the ALB's security group only, so it inherits this restriction.
+- **Existing cluster.** The template change only affects new clusters. To restrict a running cluster: `eksctl utils set-public-access-cidrs --cluster <name> <cidr> --approve` (changes the control-plane endpoint; review first). Re-running `04-installEnvoy.sh` updates the ALB allowlist.
+- **Validate:**
+
+  ```bash
+  aws ec2 describe-security-groups --group-ids <alb-sg-id> \
+    --query 'SecurityGroups[0].IpPermissions[].IpRanges[].CidrIp'
+  aws eks describe-cluster --name "$CLUSTER_NAME" \
+    --query 'cluster.resourcesVpcConfig.[endpointPublicAccess,publicAccessCidrs]'
+  ```
+
+  Then confirm CJOC loads on Tailscale and times out off the VPN, and that a GitHub webhook redelivery returns 200.
+- **Status:** the allowlist logic was only syntax-checked and the `publicAccessCIDRs` rendering was checked with `envsubst`; neither has been run against a real account. Try it on a throwaway cluster first.
+
 ## Execution Sequence
 
 [`01-createAll.sh`](01-createAll.sh) **runs the whole sequence below** by calling the individual scripts in order. You normally don't run them by hand.
@@ -42,6 +84,7 @@ source .env
 ./01-createAll.sh --yes                            # no questions (combine with the flag above as needed)
 ```
 
+- **Tailscale first.** Connect to the CloudBees Tailscale VPN before running; the EKS API and ALB only accept allowlisted sources. See [Network Access](#network-access-tailscale-vpn-and-security-groups).
 - **Authentication first.** The script checks `aws sts get-caller-identity` and aborts if your session is invalid. Authenticate (e.g. `aws sso login`) before running it; `00-login.sh` only sources `.env`.
 - **Optional steps** (`02-*`, all `07-*` create scripts, `08-*`) run only with `--install-optional-resources`. Their use inside `05-installCloudBees.sh` is still controlled by `.env` (`S3_LOGS_ENABLED`, `CASC_ENABLED`, `MCP_ENABLED`, ...).
 - **Re-runs.** Non-idempotent steps (cluster, EFS, the three S3 buckets, EC2 controller, remote-agent ServiceAccount) are detected and skipped when they already exist. Helm-based steps always run (`helm upgrade --install`), so changed `.env` flags are applied. The first failing step aborts the run; fix the cause and re-run.
@@ -252,7 +295,7 @@ agent pods will stay `Pending` indefinitely.
 | --- | --- | --- |
 | 00 | [`00-login.sh`](00-login.sh) | Only sources `.env` (the `aws sso login` / `AWS_*` key export lines are comments). Authenticate to AWS yourself before running any script. |
 | 01 | [`01-createAll.sh`](01-createAll.sh) | Runs the full creation sequence by calling the scripts below in order. Flags: `--install-optional-resources`, `--yes` (otherwise asks `[Y/n/q]` per step), `--dry-run`. Skips existing non-idempotent resources, aborts on the first failure. See [Execution Sequence](#execution-sequence). |
-| 01 | [`01-createCluster.sh`](01-createCluster.sh) | Renders [`eksctl-config.yaml.tpl`](eksctl-config.yaml.tpl) and creates the EKS cluster, VPC, managed node groups (`controllers` and `agents`, both tainted for workload isolation; `system`, untainted, for cluster add-ons — see [Node Groups & Workload Isolation](#node-groups--workload-isolation)), OIDC/IRSA and Pod Identity, and the EBS/EFS CSI + Pod Identity Agent add-ons. Migrates to EKS Pod Identity and writes kubeconfig. |
+| 01 | [`01-createCluster.sh`](01-createCluster.sh) | Renders [`eksctl-config.yaml.tpl`](eksctl-config.yaml.tpl) and creates the EKS cluster, VPC, managed node groups (`controllers` and `agents`, both tainted for workload isolation; `system`, untainted, for cluster add-ons — see [Node Groups & Workload Isolation](#node-groups--workload-isolation)), OIDC/IRSA and Pod Identity, and the EBS/EFS CSI + Pod Identity Agent add-ons. Migrates to EKS Pod Identity and writes kubeconfig. The public API endpoint is restricted to `EKS_PUBLIC_ACCESS_CIDRS` (`publicAccessCIDRs`), so run it while connected to Tailscale (see [Network Access](#network-access-tailscale-vpn-and-security-groups)). |
 | 01 | [`01-scaleDonwNodePools.sh`](01-scaleDonwNodePools.sh) | Scales every managed node group to 0 to park the environment (saves EC2 cost only — control plane, NAT, ALB, EBS/EFS keep billing). Saves current sizes to [`.nodepool-scale-state.json`](.nodepool-scale-state.json). |
 | 01 | [`01-scaleUpNodePools.sh`](01-scaleUpNodePools.sh) | Restores node groups to the sizes recorded by the scale-down script (or explicit `--nodes*` flags / config defaults if that state file is missing). |
 | 01 | [`01-deleteCluster.sh`](01-deleteCluster.sh) | Bare `eksctl delete cluster` for the config in this directory. No detection of add-on resources, no orphan scan; use [`09-deleteAll.sh`](09-deleteAll.sh) for a proper teardown. |
@@ -261,7 +304,7 @@ agent pods will stay `Pending` indefinitely.
 | 02 | [`02-delete-efs-filesystem.sh`](02-delete-efs-filesystem.sh) | Removes everything the EFS create script made: test namespace, StorageClass, fallback IAM role, mount targets, file system, and security group. Has no flags and no confirmation prompt. |
 | 03 | [`03-installAwsLbController.sh`](03-installAwsLbController.sh) | Installs the AWS Load Balancer Controller via Helm using the IRSA ServiceAccount eksctl already created, applies its CRDs, and verifies public subnets carry the `kubernetes.io/role/elb=1` tag the controller needs to place an ALB. |
 | 03 | [`03-installClusterAutoscaler.sh`](03-installClusterAutoscaler.sh) | Installs Kubernetes Cluster Autoscaler via Helm using the IRSA ServiceAccount eksctl created (`wellKnownPolicies.autoScaler`), matches the image tag to the cluster's live Kubernetes minor version, and verifies the node groups' ASGs are tagged for auto-discovery (automatic since `minSize != maxSize` on `controllers`, `agents` and `system`). Also grants supplemental read-only RBAC on the `resource.k8s.io` API group (Dynamic Resource Allocation objects), which newer autoscaler builds watch unconditionally but the Helm chart's bundled ClusterRole doesn't grant. Independent of the ALB/Envoy chain — run any time after [`01-createCluster.sh`](01-createCluster.sh). |
-| 04 | [`04-installEnvoy.sh`](04-installEnvoy.sh) | Installs Envoy Gateway, requests/validates the ACM certificate for `CJOC_HOST_NAME` (with automated Route53 DNS validation), and creates the Gateway/GatewayClass/HTTPRoute plumbing plus the `cjoc-alb` Ingress that provisions the **shared internet-facing ALB**. |
+| 04 | [`04-installEnvoy.sh`](04-installEnvoy.sh) | Installs Envoy Gateway, requests/validates the ACM certificate for `CJOC_HOST_NAME` (with automated Route53 DNS validation), and creates the Gateway/GatewayClass/HTTPRoute plumbing plus the `cjoc-alb` Ingress that provisions the **shared internet-facing ALB**, with its security group restricted via `inbound-cidrs` to Tailscale, GitHub webhook ranges and the NAT EIP (HTTPS :443 only unless `ALB_LISTEN_HTTP=true`). Needs `jq`, `curl` and internet access; aborts if the allowlist would be empty. See [Network Access](#network-access-tailscale-vpn-and-security-groups). |
 | 04 | [`04-deleteEnvoy.sh`](04-deleteEnvoy.sh) | Tears down the Ingress (deprovisioning the ALB), Gateway API resources, and the Envoy Gateway Helm release. Refuses to delete the Ingress unless the AWS Load Balancer Controller has a ready replica (otherwise the finalizer hangs and the ALB and its `k8s-traffic-*` security group are orphaned; override with `--skip-lbc-check`). Leaves the CloudBees namespace, CRDs, and ACM certificate in place unless `--delete-crds` / `--delete-cert` are passed. `--yes` skips the prompt. |
 | 05 | [`05-installCloudBees.sh`](05-installCloudBees.sh) | Installs CloudBees CI (Operations Center / CJOC) via the `cloudbees/cloudbees-core` Helm chart, wired to the Gateway from step 04, and waits for the Gateway to get an address. Optional parts are switched on in `.env` (see [Optional install flags](#optional-install-flags-05-installcloudbeessh)). |
 | 05 | [`05-deleteCloudBees.sh`](05-deleteCloudBees.sh) | Uninstalls the CloudBees CI Helm release and stops managed controllers, keeping their volumes by default. `--delete-data` also deletes the PVCs (JENKINS_HOME), `--delete-namespace` the namespaces (requires `--delete-data`), `--keep-controllers` leaves managed controllers running, `--yes` skips the prompt. |
@@ -331,7 +374,8 @@ The router is served through the Gateway at `https://<CJOC_HOST_NAME>/mcp-router
 
 ```mermaid
 flowchart TB
-    User(("Internet users"))
+    User(("Users on Tailscale VPN\n(app connector XX.XXX.XXX.XXX/32)"))
+    GH(("GitHub webhooks\n(api.github.com/meta hooks)"))
 
     subgraph DNS["Route53 — USER_ID.aws.ps.beescloud.com"]
         direction LR
@@ -347,7 +391,7 @@ flowchart TB
 
     subgraph VPC["VPC"]
         subgraph Public["Public subnets"]
-            ALB["Shared internet-facing ALB\nHTTPS :443, host-header routing"]
+            ALB["Shared ALB (internet-facing)\nHTTPS :443, host-header routing\nSG restricted via inbound-cidrs:\nTailscale + GitHub hooks + NAT EIP"]
             NAT["NAT Gateway"]
         end
 
@@ -373,6 +417,7 @@ flowchart TB
 
     User -->|HTTPS| R53_CJOC
     User -->|HTTPS| R53_EC2
+    GH -->|"HTTPS webhooks"| R53_CJOC
     R53_CJOC --> ALB
     R53_EC2 --> ALB
 
