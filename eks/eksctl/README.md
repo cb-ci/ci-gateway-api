@@ -13,7 +13,7 @@ together below.
 
 ### 1. Prerequisites
 
-**Fork this repository into your own GitHub account and create a personal access token (PAT) with repo scope.***
+**Fork this repository into your own GitHub account and create a personal access token (PAT) with repo scope.**
 
 - **CLI Tools:** `aws` (v2), `eksctl`, `kubectl`, `helm`, `jq`, and `envsubst` on your `PATH`.
 - **VPN:** Connected to **Tailscale** (API server and ALB traffic are restricted to allowlisted CIDRs).
