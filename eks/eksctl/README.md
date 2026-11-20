@@ -81,6 +81,83 @@ Once Route53 DNS records propagate (typically 1–2 minutes after step 06):
 
 ---
 
+## Architecture
+
+```mermaid
+flowchart TB
+    User(("Users on Tailscale VPN\n(app connector XX.XXX.XXX.XXX/32)"))
+    GH(("GitHub webhooks\n(api.github.com/meta hooks)"))
+
+    subgraph DNS["Route53 — USER_ID.aws.ps.beescloud.com"]
+        direction LR
+        R53_CJOC["A (Record)\nci.___\nmanaged by external-dns"]
+        R53_EC2["A (Record)\nec2-controller.___\nmanaged by the EC2 controller add-on"]
+    end
+
+    subgraph AWSAcct["AWS account-level resources"]
+        direction LR
+        ACM["ACM certificates\n(cjoc + ec2-controller, DNS-validated)"]
+        SSM["AWS Systems Manager\nSession Manager"]
+    end
+
+    subgraph VPC["VPC"]
+        subgraph Public["Public subnets"]
+            ALB["Shared ALB (internet-facing)\nHTTPS :443, host-header routing\nSG restricted via inbound-cidrs:\nTailscale + GitHub hooks + NAT EIP"]
+            NAT["NAT Gateway"]
+        end
+
+        subgraph Private["Private subnets"]
+            subgraph EKS["EKS cluster: CLUSTER_NAME"]
+                LBC["aws-load-balancer-controller"]
+                CA["cluster-autoscaler"]
+                EDNS["external-dns"]
+                EnvoySvc["Envoy Service (ClusterIP)"]
+                EnvoyGW["Envoy Gateway + HTTPRoute"]
+                CJOC["CJOC / CloudBees CI\nStatefulSet + PVC"]
+                NGControllers["Node group: controllers\n(tainted, Graviton)"]
+                NGAgents["Node group: agents\n(tainted)"]
+                NGSystem["Node group: system\n(untainted — CoreDNS, CSI\ncontrollers, LBC, CA, EDNS,\nEnvoy Gateway, metrics-server)"]
+            end
+
+            EC2["EC2 instance (Amazon Linux 2023)\nCloudBees CI Client Controller\nsystemd + Docker, :8080"]
+        end
+
+        EFS[("EFS shared storage")]
+        EBS[("EBS volume\nJENKINS_HOME")]
+    end
+
+    User -->|HTTPS| R53_CJOC
+    User -->|HTTPS| R53_EC2
+    GH -->|"HTTPS webhooks"| R53_CJOC
+    R53_CJOC --> ALB
+    R53_EC2 --> ALB
+
+    ALB -->|"host: ci.___"| EnvoySvc --> EnvoyGW --> CJOC
+    ALB -->|"host: ec2-controller.___"| EC2
+    ALB -. SNI certificates .-> ACM
+
+    LBC -. reconciles .-> ALB
+    EDNS -. upserts .-> R53_CJOC
+    CJOC --> EBS
+    NGControllers --- CJOC
+    NGAgents -. build agents .-> CJOC
+    NGSystem --- LBC
+    NGSystem --- CA
+    NGSystem --- EDNS
+    NGSystem --- EnvoyGW
+    CA -. resizes on pod pressure .-> NGControllers
+    CA -. resizes on pod pressure .-> NGAgents
+    CA -. resizes on pod pressure .-> NGSystem
+    EC2 -. IAM instance profile .-> SSM
+    Private -->|egress| NAT
+
+    classDef optional stroke-dasharray: 5 5
+    class EC2,R53_EC2 optional
+```
+
+Dashed-border nodes (`EC2`, `R53_EC2`) are the optional add-on from step 07 —
+everything else is created by the core 01–06 sequence.
+
 # Details
 
 ## Network Access (Tailscale VPN and security groups)
@@ -422,80 +499,3 @@ Set `MCP_ENABLED=true` in `.env` before running `05-installCloudBees.sh` to depl
 The router is served through the Gateway at `https://<CJOC_HOST_NAME>/mcp-router/mcp`.
 
 **Prerequisite:** the MCP Server plugin must be on the controllers, and the OAuth Authorization Server plugin on the operations center and the OAuth Resource Server plugin on the controllers (`OAUTH_ONLY` needs the last one everywhere). The `casc/` bundles install them: `mcp-server`, `cloudbees-oauth-server` and `cloudbees-oauth-resource` in `casc/cjoc/mcp/mcp-plugins.yaml`, `mcp-server` and `cloudbees-oauth-resource` in `casc/controller-base/mcp/mcp-plugins.yaml`. The retriever reads the bundles from `CASC_SCM_REPO`/`CASC_SCM_BRANCH`, so commit and push them first.
-
-## Architecture
-
-```mermaid
-flowchart TB
-    User(("Users on Tailscale VPN\n(app connector XX.XXX.XXX.XXX/32)"))
-    GH(("GitHub webhooks\n(api.github.com/meta hooks)"))
-
-    subgraph DNS["Route53 — USER_ID.aws.ps.beescloud.com"]
-        direction LR
-        R53_CJOC["A (Record)\nci.___\nmanaged by external-dns"]
-        R53_EC2["A (Record)\nec2-controller.___\nmanaged by the EC2 controller add-on"]
-    end
-
-    subgraph AWSAcct["AWS account-level resources"]
-        direction LR
-        ACM["ACM certificates\n(cjoc + ec2-controller, DNS-validated)"]
-        SSM["AWS Systems Manager\nSession Manager"]
-    end
-
-    subgraph VPC["VPC"]
-        subgraph Public["Public subnets"]
-            ALB["Shared ALB (internet-facing)\nHTTPS :443, host-header routing\nSG restricted via inbound-cidrs:\nTailscale + GitHub hooks + NAT EIP"]
-            NAT["NAT Gateway"]
-        end
-
-        subgraph Private["Private subnets"]
-            subgraph EKS["EKS cluster: CLUSTER_NAME"]
-                LBC["aws-load-balancer-controller"]
-                CA["cluster-autoscaler"]
-                EDNS["external-dns"]
-                EnvoySvc["Envoy Service (ClusterIP)"]
-                EnvoyGW["Envoy Gateway + HTTPRoute"]
-                CJOC["CJOC / CloudBees CI\nStatefulSet + PVC"]
-                NGControllers["Node group: controllers\n(tainted, Graviton)"]
-                NGAgents["Node group: agents\n(tainted)"]
-                NGSystem["Node group: system\n(untainted — CoreDNS, CSI\ncontrollers, LBC, CA, EDNS,\nEnvoy Gateway, metrics-server)"]
-            end
-
-            EC2["EC2 instance (Amazon Linux 2023)\nCloudBees CI Client Controller\nsystemd + Docker, :8080"]
-        end
-
-        EFS[("EFS shared storage")]
-        EBS[("EBS volume\nJENKINS_HOME")]
-    end
-
-    User -->|HTTPS| R53_CJOC
-    User -->|HTTPS| R53_EC2
-    GH -->|"HTTPS webhooks"| R53_CJOC
-    R53_CJOC --> ALB
-    R53_EC2 --> ALB
-
-    ALB -->|"host: ci.___"| EnvoySvc --> EnvoyGW --> CJOC
-    ALB -->|"host: ec2-controller.___"| EC2
-    ALB -. SNI certificates .-> ACM
-
-    LBC -. reconciles .-> ALB
-    EDNS -. upserts .-> R53_CJOC
-    CJOC --> EBS
-    NGControllers --- CJOC
-    NGAgents -. build agents .-> CJOC
-    NGSystem --- LBC
-    NGSystem --- CA
-    NGSystem --- EDNS
-    NGSystem --- EnvoyGW
-    CA -. resizes on pod pressure .-> NGControllers
-    CA -. resizes on pod pressure .-> NGAgents
-    CA -. resizes on pod pressure .-> NGSystem
-    EC2 -. IAM instance profile .-> SSM
-    Private -->|egress| NAT
-
-    classDef optional stroke-dasharray: 5 5
-    class EC2,R53_EC2 optional
-```
-
-Dashed-border nodes (`EC2`, `R53_EC2`) are the optional add-on from step 07 —
-everything else is created by the core 01–06 sequence.
