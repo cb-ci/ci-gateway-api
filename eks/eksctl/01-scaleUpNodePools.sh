@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # -----------------------------------------------------------------------------
 # 01-scaleUpNodePools.sh — Restore every managed node group to the size it had
-# before 01-scaleDonwNodePools.sh parked it.
+# before 01-scaleDownNodePools.sh parked it.
 #
 # WHERE THE SIZES COME FROM
 #   .nodepool-scale-state.json, written by the scale-down script. Each node
@@ -140,7 +140,7 @@ for entry in "${PLAN[@]}"; do
 done
 success "Scale-up requested for all node groups."
 
-# Restore cluster-autoscaler if 01-scaleDonwNodePools.sh paused it.
+# Restore cluster-autoscaler if 01-scaleDownNodePools.sh paused it.
 CA_FILE="${STATE_FILE}.autoscaler"
 if [[ -f "$CA_FILE" ]] && command -v kubectl >/dev/null 2>&1; then
   read -r CA_DEPLOY CA_REPLICAS < "$CA_FILE"

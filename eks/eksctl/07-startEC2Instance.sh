@@ -12,7 +12,7 @@
 #
 # WHAT THIS DOES NOT COVER
 #   This does not scale the EKS node groups back up (see
-#   01-scaleDonwNodePools.sh's counterpart, if any) and does not verify the
+#   01-scaleDownNodePools.sh's counterpart, if any) and does not verify the
 #   Client Controller service inside the instance has come up — only that the
 #   instance reached the 'running' state.
 #

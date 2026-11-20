@@ -16,7 +16,7 @@
 # WHAT THIS DOES NOT SAVE YOU
 #   Stopping the instance stops its own EC2 compute charges only. You still
 #   pay for: the attached EBS volume(s), the shared ALB, the EKS cluster and
-#   its node groups (see 01-scaleDonwNodePools.sh for those), and the NAT
+#   its node groups (see 01-scaleDownNodePools.sh for those), and the NAT
 #   gateway. Nothing here scales the cluster down.
 #
 # Usage:

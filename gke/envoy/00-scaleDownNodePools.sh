@@ -2,7 +2,7 @@
 # -----------------------------------------------------------------------------
 # 00-scaleDownNodePools.sh — Scale every node pool in the GKE cluster to zero
 # nodes, to park the environment without destroying it. GKE counterpart of
-# eks/eksctl/01-scaleDonwNodePools.sh.
+# eks/eksctl/01-scaleDownNodePools.sh.
 #
 # HOW
 #   GKE's node autoscaler would immediately undo a manual resize, so for each

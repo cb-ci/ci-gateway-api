@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # -----------------------------------------------------------------------------
-# 01-scaleDonwNodePools.sh — Scale every managed node group in the cluster to
+# 01-scaleDownNodePools.sh — Scale every managed node group in the cluster to
 # zero nodes, to park the environment without destroying it.
 #
 # WHY minSize HAS TO CHANGE TOO
@@ -31,10 +31,10 @@
 #   dirty. Pass --drain to cordon and evict first.
 #
 # Usage:
-#   ./01-scaleDonwNodePools.sh              # scale all pools to 0
-#   ./01-scaleDonwNodePools.sh --drain      # cordon + drain nodes first
-#   ./01-scaleDonwNodePools.sh --no-wait    # don't block until nodes are gone
-#   ./01-scaleDonwNodePools.sh --yes        # skip the confirmation prompt
+#   ./01-scaleDownNodePools.sh              # scale all pools to 0
+#   ./01-scaleDownNodePools.sh --drain      # cordon + drain nodes first
+#   ./01-scaleDownNodePools.sh --no-wait    # don't block until nodes are gone
+#   ./01-scaleDownNodePools.sh --yes        # skip the confirmation prompt
 # -----------------------------------------------------------------------------
 set -euo pipefail
 

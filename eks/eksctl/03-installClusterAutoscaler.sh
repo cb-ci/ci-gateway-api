@@ -11,7 +11,7 @@
 #   true for both the `controllers` and `agents` pools. Nothing installs the
 #   autoscaler pod itself though, so node groups never move off
 #   desiredCapacity on their own; that gap is what the manual
-#   01-scaleUpNodePools.sh / 01-scaleDonwNodePools.sh scripts work around.
+#   01-scaleUpNodePools.sh / 01-scaleDownNodePools.sh scripts work around.
 #
 # ORDER
 #   Run AFTER 01-createCluster.sh. Independent of 03-installAwsLbController.sh

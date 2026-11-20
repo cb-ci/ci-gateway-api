@@ -76,7 +76,7 @@ Once Route53 DNS records propagate (typically 1–2 minutes after step 06):
 
 ### 5. Day-2 & Teardown
 
-- **Save compute costs (park node pools):** Run [`./01-scaleDonwNodePools.sh`](01-scaleDonwNodePools.sh) (resume with [`./01-scaleUpNodePools.sh`](01-scaleUpNodePools.sh)).
+- **Save compute costs (park node pools):** Run [`./01-scaleDownNodePools.sh`](01-scaleDownNodePools.sh) (resume with [`./01-scaleUpNodePools.sh`](01-scaleUpNodePools.sh)).
 - **Clean teardown:** Run [`./09-deleteAll.sh`](09-deleteAll.sh) (`--dry-run` first) to safely deprovision all AWS and Kubernetes resources.
 
 ---
@@ -257,7 +257,7 @@ source .env
 
 The following scripts are **operational** — run them any time after the initial sequence, not as part of it:
 
-- **Node pool scaling:** [`01-scaleDonwNodePools.sh`](01-scaleDonwNodePools.sh) / [`01-scaleUpNodePools.sh`](01-scaleUpNodePools.sh)
+- **Node pool scaling:** [`01-scaleDownNodePools.sh`](01-scaleDownNodePools.sh) / [`01-scaleUpNodePools.sh`](01-scaleUpNodePools.sh)
 - **Cluster upgrades:** [`01-upgradeCluster.sh`](01-upgradeCluster.sh)
 - **EC2 controller power management:** [`07-stopEC2Instance.sh`](07-stopEC2Instance.sh) / [`07-startEC2Instance.sh`](07-startEC2Instance.sh)
 - **S3 bucket management:** The `07-*S3*` bucket scripts (see [S3 Storage](#s3-storage-optional))
@@ -426,7 +426,7 @@ agent pods will stay `Pending` indefinitely.
 | 00 | [`00-login.sh`](00-login.sh) | Only sources `.env` (the `aws sso login` / `AWS_*` key export lines are comments). Authenticate to AWS yourself before running any script. |
 | 01 | [`01-createAll.sh`](01-createAll.sh) | Runs the full creation sequence by calling the scripts below in order. Flags: `--install-optional-resources`, `--yes` (otherwise asks `[Y/n/q]` per step), `--dry-run`. Skips existing non-idempotent resources, aborts on the first failure. See [Execution Sequence](#execution-sequence). |
 | 01 | [`01-createCluster.sh`](01-createCluster.sh) | Renders [`eksctl-config.yaml.tpl`](eksctl-config.yaml.tpl) and creates the EKS cluster, VPC, managed node groups (`controllers` and `agents`, both tainted for workload isolation; `system`, untainted, for cluster add-ons — see [Node Groups & Workload Isolation](#node-groups--workload-isolation)), OIDC/IRSA and Pod Identity, and the EBS/EFS CSI + Pod Identity Agent add-ons. Migrates to EKS Pod Identity and writes kubeconfig. The public API endpoint is restricted to `EKS_PUBLIC_ACCESS_CIDRS` (`publicAccessCIDRs`), so run it while connected to Tailscale (see [Network Access](#network-access-tailscale-vpn-and-security-groups)). |
-| 01 | [`01-scaleDonwNodePools.sh`](01-scaleDonwNodePools.sh) | Scales every managed node group to 0 to park the environment (saves EC2 cost only — control plane, NAT, ALB, EBS/EFS keep billing). Saves current sizes to [`.nodepool-scale-state.json`](.nodepool-scale-state.json). |
+| 01 | [`01-scaleDownNodePools.sh`](01-scaleDownNodePools.sh) | Scales every managed node group to 0 to park the environment (saves EC2 cost only — control plane, NAT, ALB, EBS/EFS keep billing). Saves current sizes to [`.nodepool-scale-state.json`](.nodepool-scale-state.json). |
 | 01 | [`01-scaleUpNodePools.sh`](01-scaleUpNodePools.sh) | Restores node groups to the sizes recorded by the scale-down script (or explicit `--nodes*` flags / config defaults if that state file is missing). |
 | 01 | [`01-deleteCluster.sh`](01-deleteCluster.sh) | Bare `eksctl delete cluster` for the config in this directory. No detection of add-on resources, no orphan scan; use [`09-deleteAll.sh`](09-deleteAll.sh) for a proper teardown. |
 | 01 | [`01-upgradeCluster.sh`](01-upgradeCluster.sh) | Upgrades the cluster one Kubernetes minor version at a time: control plane (`eksctl upgrade cluster`), EKS-managed add-ons (`eksctl update addon`), then managed node groups (`eksctl upgrade nodegroup`). Refreshes kubeconfig and bumps the `version:` field in [`eksctl-config.yaml.tpl`](eksctl-config.yaml.tpl) to match. Defaults to current+1 minor version; override with `--version`. |
