@@ -9,26 +9,79 @@ Scripts are numbered in the order they're meant to be run. Numbers that share
 a prefix (e.g. `01-*`, `04-*`) operate on the same resource and are grouped
 together below.
 
-## Setup
+## Quick Start
 
-Every script sources `.env` for its configuration — none of them work
-until it exists. Create it from the template before running anything else:
+### 1. Prerequisites
+
+**Fork this repository into your own GitHub account and create a personal access token (PAT) with repo scope.***
+
+- **CLI Tools:** `aws` (v2), `eksctl`, `kubectl`, `helm`, `jq`, and `envsubst` on your `PATH`.
+- **VPN:** Connected to **Tailscale** (API server and ALB traffic are restricted to allowlisted CIDRs).
+- **AWS Auth:** Active AWS session (e.g., `aws sso login && aws sts get-caller-identity`) .
+- **GitHub:** Personal Access Token (PAT with `repo` scope) if using CasC.
+
+### 2. Configure Environment
 
 ```bash
 cp .env-template .env
 ```
 
-Then edit `.env` and replace every `<...>` placeholder: `<USER_ID>` (in `TAG_CB_USER`
-and `CJOC_HOST_NAME`) with your own identifier — it's used to tag every AWS
-resource, name the cluster (`CLUSTER_NAME=${TAG_CB_USER}`), and build the
-CJOC hostname. Also set the `CASC_*` and `CJOC_ADMIN_*` placeholders (or set
-`CASC_ENABLED=false`). Review the rest of the file too (region, chart versions,
-storage class) and adjust anything that doesn't match your account.
+Edit `.env` and set the minimum required variables:
+
+```bash
+USER_ID=<your-id>                     # No underscores! Used in cluster name, domain, and AWS tags
+ALB_TAILSCALE_CIDRS=<app-connector-ip>/32
+EKS_PUBLIC_ACCESS_CIDRS='"<app-connector-ip>/32"'
+CASC_ENABLED=true|false # default: false. If true, CasC will be enabled. If false, not need to setup the variables below.
+CJOC_ADMIN_USER=admin
+CJOC_ADMIN_PASSWORD=<strong-password>
+CJOC_ADMIN_EMAIL=<your-email@example.com>
+CASC_SCM_USERNAME=<github-user>       # Required if CASC_ENABLED=true
+CASC_SCM_PASSWORD=<github-pat-token>  # PAT with repo scope
+```
+
+Source the file in your terminal:
+
+```bash
+source .env
+```
 
 `.env` is git-ignored (`eks/.gitignore`) because it holds secrets (SCM token,
 operations center admin password, GitHub App key). Keep it that way.
 
 See [`.env-template`](.env-template) for the full list of variables.
+
+### 3. Deploy the Stack
+
+Run the creation orchestrator to provision the EKS cluster, AWS Load Balancer Controller, Envoy Gateway, CloudBees CI (CJOC), and Route53 DNS:
+
+```bash
+# Preview planned execution steps
+./01-createAll.sh --dry-run
+
+# Run deployment (prompts [Y/n/q] for each major step)
+./01-createAll.sh
+
+# Or unattended with all optional add-ons (EFS, S3 buckets, EC2 controller, remote-agent SA):
+./01-createAll.sh --yes --install-optional-resources
+```
+
+### 4. Access CJOC
+
+Once Route53 DNS records propagate (typically 1–2 minutes after step 06):
+
+- **URL:** `https://${CJOC_HOST_NAME}` (e.g., `https://ci.<USER_ID>.aws.ps.beescloud.com`)
+- **Login:** Sign in with `$CJOC_ADMIN_USER` and `$CJOC_ADMIN_PASSWORD`.
+*(Ensure Tailscale VPN is connected; traffic outside allowlisted CIDRs will time out).*
+
+### 5. Day-2 & Teardown
+
+- **Save compute costs (park node pools):** Run [`./01-scaleDonwNodePools.sh`](01-scaleDonwNodePools.sh) (resume with [`./01-scaleUpNodePools.sh`](01-scaleUpNodePools.sh)).
+- **Clean teardown:** Run [`./09-deleteAll.sh`](09-deleteAll.sh) (`--dry-run` first) to safely deprovision all AWS and Kubernetes resources.
+
+---
+
+# Deatils
 
 ## Network Access (Tailscale VPN and security groups)
 
