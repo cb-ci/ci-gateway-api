@@ -81,7 +81,7 @@ Once Route53 DNS records propagate (typically 1–2 minutes after step 06):
 
 ---
 
-# Deatils
+# Details
 
 ## Network Access (Tailscale VPN and security groups)
 
